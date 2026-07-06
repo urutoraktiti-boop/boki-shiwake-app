@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>管理者ダッシュボード｜簿記2級 仕訳トレーニング</title>
+<style>
+  :root{
+    --primary:#1a5fb4; --primary-dark:#14497f; --bg:#f4f6f9; --card:#ffffff;
+    --ok:#2e9e5b; --ng:#d94f4f; --warn:#c98a12; --text:#22303d; --sub:#6b7a89; --line:#dbe2ea;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:"Hiragino Sans","Yu Gothic",Meiryo,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; margin:0; padding:16px;}
+  .wrap{max-width:1200px; margin:0 auto;}
+  header{background:var(--primary); color:#fff; border-radius:12px; padding:14px 18px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;}
+  header h1{font-size:1.15rem; margin:0;}
+  header .ver{font-size:.7rem; opacity:.75;}
+  header p{margin:2px 0 0; font-size:.82rem; opacity:.9;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px;}
+  button{font-family:inherit; cursor:pointer; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); padding:8px 14px; font-size:.88rem; font-weight:600;}
+  button.primary{background:var(--primary); color:#fff; border-color:var(--primary);}
+  button.primary:hover{background:var(--primary-dark);}
+  button:disabled{opacity:.5; cursor:default;}
+  .muted{color:var(--sub); font-size:.85rem;}
+  /* ログイン画面 */
+  #login-view{text-align:center; padding:40px 16px;}
+  #login-view h2{color:var(--primary-dark);}
+  #login-btn{font-size:1rem; padding:12px 24px; margin-top:12px;}
+  /* サマリー */
+  .stat-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .stat{flex:1; min-width:120px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px;}
+  .stat .num{font-size:1.6rem; font-weight:700; color:var(--primary);}
+  .stat .lbl{font-size:.78rem; color:var(--sub);}
+  /* コントロール */
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;}
+  .controls select, .controls input{font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
+  /* テーブル */
+  .tbl-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  table{border-collapse:collapse; width:100%; font-size:.84rem;}
+  th,td{border:1px solid var(--line); padding:6px 8px; text-align:center; white-space:nowrap;}
+  th{background:#eef3f9; color:var(--primary-dark); font-weight:700; position:sticky; top:0; cursor:pointer; user-select:none;}
+  th.name-col, td.name-col{text-align:left;}
+  tbody tr:hover{background:#f7fafd;}
+  td.univ{text-align:left; font-weight:600;}
+  .score-cell{font-weight:700;}
+  .s-pass{background:#e3f5ea; color:#1f7a44;}
+  .s-mid{background:#fdf3df; color:#96690b;}
+  .s-fail{background:#fbe6e6; color:#a83b3b;}
+  .s-none{color:#c2ccd6;}
+  .badge-total{display:inline-block; min-width:34px; padding:1px 8px; border-radius:20px; background:#e8eef7; color:var(--primary); font-weight:700;}
+  /* 詳細行 */
+  .detail-row td{background:#fafcfe; text-align:left; padding:12px 16px;}
+  .detail-grid{display:flex; flex-wrap:wrap; gap:8px;}
+  .detail-chip{border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:.8rem; background:#fff;}
+  .err{color:var(--ng); font-weight:600;}
+  .foot{color:var(--sub); font-size:.78rem; text-align:center; margin-top:18px;}
+  a{color:var(--primary);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.0</span></h1>
+      <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
+    </div>
+    <div id="user-box"></div>
+  </header>
+
+  <!-- ログイン前 -->
+  <div id="login-view" class="card">
+    <h2>管理者ログイン</h2>
+    <p class="muted">許可された管理者のGoogleアカウントでログインしてください。</p>
+    <button id="login-btn" class="primary">Googleでログイン</button>
+    <p id="login-msg" class="err" style="margin-top:14px"></p>
+  </div>
+
+  <!-- ログイン後 -->
+  <div id="main-view" style="display:none">
+    <div id="summary" class="stat-row"></div>
+    <div class="card">
+      <div class="controls">
+        <label>大学：
+          <select id="univ-filter"><option value="">すべて</option></select>
+        </label>
+        <label>検索：
+          <input id="search-box" type="text" placeholder="学籍番号で絞り込み" style="width:160px">
+        </label>
+        <button id="reload-btn">🔄 再読み込み</button>
+        <button id="csv-btn">⬇ CSV書き出し</button>
+        <span id="load-msg" class="muted"></span>
+      </div>
+      <div class="tbl-scroll">
+        <table id="grade-table">
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">
+    このページはFirebase Authenticationでログインした管理者のみデータを取得できます（Firestoreルールで制御）。<br>
+    表示は各学生が同期した最新データに基づきます（自己申告ベース）。
+  </p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, getDocs }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ===== 設定 ===== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC29p0TS5K8FFs4s0ICxRrcOSLdXOnwIII",
+  authDomain: "boki-shiwake-app.firebaseapp.com",
+  projectId: "boki-shiwake-app"
+};
+const SYNC_COLLECTION = "boki2_sync";
+/* 管理者として一覧を許可するメールアドレス（Firestoreルールと必ず一致させる） */
+const ADMIN_EMAILS = ["urutoraktiti@gmail.com"];
+
+/* ===== 初期化 ===== */
+const app = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+
+let ROWS = [];      // 整形済みの学生データ
+let GROUPS = [];     // 列に使う回別テスト名（① 〜 の順）
+let sortKey = "univ";
+let sortAsc = true;
+
+/* ===== 認証 ===== */
+$("login-btn").onclick = async () => {
+  $("login-msg").textContent = "";
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch (e) {
+    $("login-msg").textContent = "ログインに失敗しました：" + (e.code || e.message);
+  }
+};
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    const allowed = ADMIN_EMAILS.includes((user.email || "").toLowerCase());
+    $("user-box").innerHTML =
+      `<span style="font-size:.82rem">${esc(user.email)}</span> ` +
+      `<button id="logout-btn" style="margin-left:8px">ログアウト</button>`;
+    $("logout-btn").onclick = () => signOut(auth);
+    if (allowed) {
+      $("login-view").style.display = "none";
+      $("main-view").style.display = "";
+      loadData();
+    } else {
+      $("login-view").style.display = "";
+      $("main-view").style.display = "none";
+      $("login-msg").textContent =
+        `このアカウント（${user.email}）には閲覧権限がありません。管理者用アカウントでログインしてください。`;
+    }
+  } else {
+    $("user-box").innerHTML = "";
+    $("login-view").style.display = "";
+    $("main-view").style.display = "none";
+  }
+});
+
+/* ===== データ取得 ===== */
+async function loadData() {
+  $("load-msg").textContent = "読み込み中…";
+  try {
+    const snap = await getDocs(collection(db, SYNC_COLLECTION));
+    ROWS = [];
+    const groupSet = new Set();
+    snap.forEach(doc => {
+      const f = doc.data();
+      let data = {};
+      try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
+      const tests = Array.isArray(data.tests) ? data.tests : [];
+      // 回別テストごとに「最高点」を集計
+      const best = {};   // group -> {score, max, attempts, last}
+      tests.forEach(t => {
+        if (!t || !t.group) return;
+        groupSet.add(t.group);
+        const b = best[t.group] || { score: -1, max: t.max || 0, attempts: 0, last: null };
+        b.attempts++;
+        b.last = t.date || b.last;
+        if ((t.score ?? 0) > b.score) { b.score = t.score; b.max = t.max || b.max; }
+        best[t.group] = b;
+      });
+      ROWS.push({
+        code: doc.id,
+        univ: f.univ || "（未登録）",
+        sid: f.sid || "（未登録）",
+        updatedAt: Number(f.updatedAt || data.updatedAt || 0),
+        best,
+        attemptsTotal: tests.length
+      });
+    });
+    GROUPS = [...groupSet].sort((a, b) => a.localeCompare(b, "ja"));
+    buildUnivFilter();
+    render();
+    $("load-msg").textContent = `${ROWS.length}名 / 最終取得 ${new Date().toLocaleTimeString("ja-JP", { hour:"2-digit", minute:"2-digit" })}`;
+  } catch (e) {
+    $("load-msg").innerHTML = `<span class="err">取得エラー：${esc(e.code || e.message)}</span>`;
+    $("tbody").innerHTML = `<tr><td colspan="99" class="err" style="padding:16px">
+      データを取得できませんでした。Firestoreのセキュリティルールで、このメールアドレスに list 権限が付いているか確認してください。（${esc(e.code || e.message)}）
+    </td></tr>`;
+  }
+}
+
+/* ===== 大学フィルタ ===== */
+function buildUnivFilter() {
+  const univs = [...new Set(ROWS.map(r => r.univ))].sort((a, b) => a.localeCompare(b, "ja"));
+  const cur = $("univ-filter").value;
+  $("univ-filter").innerHTML = `<option value="">すべて（${ROWS.length}名）</option>` +
+    univs.map(u => {
+      const n = ROWS.filter(r => r.univ === u).length;
+      return `<option value="${esc(u)}">${esc(u)}（${n}名）</option>`;
+    }).join("");
+  $("univ-filter").value = cur;
+}
+
+/* ===== 短縮ラベル（仕訳対策問題① → ①） ===== */
+function shortLabel(g) {
+  const m = g.match(/[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]/);
+  return m ? m[0] : g;
+}
+
+/* ===== 点数セルの色分け（アプリと同じ70%基準） ===== */
+function scoreClass(score, max) {
+  if (max <= 0 || score < 0) return "s-none";
+  const r = score / max;
+  if (r >= 0.7) return "s-pass";
+  if (r >= 0.4) return "s-mid";
+  return "s-fail";
+}
+
+/* ===== 表示 ===== */
+function render() {
+  // サマリー
+  const univCount = new Set(ROWS.map(r => r.univ)).size;
+  const active7 = ROWS.filter(r => r.updatedAt && Date.now() - r.updatedAt < 7 * 864e5).length;
+  const withAnyTest = ROWS.filter(r => r.attemptsTotal > 0).length;
+  $("summary").innerHTML = [
+    ["登録学生", ROWS.length + "名"],
+    ["大学数", univCount + "校"],
+    ["受験実績あり", withAnyTest + "名"],
+    ["直近7日の活動", active7 + "名"]
+  ].map(([l, n]) => `<div class="stat"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join("");
+
+  // フィルタ
+  const uf = $("univ-filter").value;
+  const sq = $("search-box").value.trim().toLowerCase();
+  let rows = ROWS.filter(r =>
+    (!uf || r.univ === uf) &&
+    (!sq || r.sid.toLowerCase().includes(sq))
+  );
+
+  // ソート
+  rows.sort((a, b) => {
+    let va, vb;
+    if (sortKey === "univ") { va = a.univ + a.sid; vb = b.univ + b.sid; }
+    else if (sortKey === "updatedAt") { va = a.updatedAt; vb = b.updatedAt; }
+    else if (sortKey === "total") { va = totalBest(a); vb = totalBest(b); }
+    else { va = a.best[sortKey]?.score ?? -1; vb = b.best[sortKey]?.score ?? -1; }
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  // ヘッダー
+  const arrow = k => sortKey === k ? (sortAsc ? " ▲" : " ▼") : "";
+  $("thead").innerHTML = `<tr>
+    <th class="name-col" data-k="univ">大学 / 学籍番号${arrow("univ")}</th>
+    ${GROUPS.map(g => `<th data-k="${esc(g)}" title="${esc(g)}">${esc(shortLabel(g))}${arrow(g)}</th>`).join("")}
+    <th data-k="total">合計(最高)${arrow("total")}</th>
+    <th data-k="updatedAt">最終更新${arrow("updatedAt")}</th>
+  </tr>`;
+  $("thead").querySelectorAll("th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    if (sortKey === k) sortAsc = !sortAsc;
+    else { sortKey = k; sortAsc = (k === "univ"); }
+    render();
+  });
+
+  // ボディ
+  if (!rows.length) {
+    $("tbody").innerHTML = `<tr><td colspan="99" class="muted" style="padding:16px">該当する学生がいません。</td></tr>`;
+    return;
+  }
+  $("tbody").innerHTML = rows.map((r, i) => {
+    const cells = GROUPS.map(g => {
+      const b = r.best[g];
+      if (!b || b.score < 0) return `<td class="score-cell s-none">–</td>`;
+      return `<td class="score-cell ${scoreClass(b.score, b.max)}" title="挑戦${b.attempts}回・直近${esc(b.last || "")}">${b.score}<span class="muted" style="font-weight:400">/${b.max}</span></td>`;
+    }).join("");
+    const upd = r.updatedAt ? new Date(r.updatedAt).toLocaleDateString("ja-JP", { month:"numeric", day:"numeric" }) : "–";
+    return `<tr data-i="${i}">
+      <td class="univ name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
+      ${cells}
+      <td><span class="badge-total">${totalBest(r)}</span></td>
+      <td class="muted">${upd}</td>
+    </tr>`;
+  }).join("");
+
+  // 行クリックで詳細トグル
+  $("tbody").querySelectorAll("tr[data-i]").forEach(tr => {
+    tr.style.cursor = "pointer";
+    tr.onclick = () => toggleDetail(tr, rows[tr.dataset.i]);
+  });
+}
+
+function totalBest(r) {
+  return GROUPS.reduce((sum, g) => sum + Math.max(0, r.best[g]?.score ?? 0), 0);
+}
+
+function toggleDetail(tr, r) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains("detail-row")) { next.remove(); return; }
+  const chips = GROUPS.map(g => {
+    const b = r.best[g];
+    if (!b || b.score < 0) return `<span class="detail-chip s-none">${esc(shortLabel(g))}：未受験</span>`;
+    return `<span class="detail-chip">${esc(shortLabel(g))}：最高${b.score}/${b.max}点・挑戦${b.attempts}回・直近${esc(b.last || "")}</span>`;
+  }).join("");
+  const row = document.createElement("tr");
+  row.className = "detail-row";
+  row.innerHTML = `<td colspan="99">
+    <div style="margin-bottom:6px"><b>${esc(r.univ)}｜${esc(r.sid)}</b>
+      <span class="muted">（同期コード：${esc(r.code)}）</span></div>
+    <div class="detail-grid">${chips}</div>
+  </td>`;
+  tr.after(row);
+}
+
+/* ===== CSV ===== */
+function toCSV() {
+  const head = ["大学", "学籍番号", ...GROUPS.map(shortLabel), "合計(最高)", "最終更新"];
+  const lines = [head];
+  ROWS.forEach(r => {
+    const row = [r.univ, r.sid,
+      ...GROUPS.map(g => { const b = r.best[g]; return (b && b.score >= 0) ? `${b.score}/${b.max}` : ""; }),
+      totalBest(r),
+      r.updatedAt ? new Date(r.updatedAt).toLocaleString("ja-JP") : ""];
+    lines.push(row);
+  });
+  return lines.map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+}
+
+$("csv-btn").onclick = () => {
+  const bom = "﻿"; // Excelで文字化けしないように
+  const blob = new Blob([bom + toCSV()], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `簿記2級成績_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$("reload-btn").onclick = loadData;
+$("univ-filter").onchange = render;
+$("search-box").oninput = render;
+</script>
+</body>
+</html>

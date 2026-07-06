@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== 簿記2級 学生の学習記録（同期コードごと1件） =====
+    match /boki2_sync/{code} {
+      // 学生：同期コードを知っていれば、その1件だけ読み書きできる（従来どおり）
+      allow get, create, update: if true;
+
+      // 管理者だけ「一覧（list）」できる ＝ ダッシュボード用
+      //  ・下のメールアドレスと、admin/index.html の ADMIN_EMAILS を必ず一致させること
+      //  ・管理者を増やすときは、両方に追記する
+      allow list: if request.auth != null
+                  && request.auth.token.email_verified == true
+                  && request.auth.token.email in [
+                       'urutoraktiti@gmail.com'
+                     ];
+
+      // 削除は誰にも許可しない
+      allow delete: if false;
+    }
+
+    // ===== 3級版を作る場合は、ここに boki3_sync を同じ形で追加する =====
+    // match /boki3_sync/{code} {
+    //   allow get, create, update: if true;
+    //   allow list: if request.auth != null
+    //               && request.auth.token.email_verified == true
+    //               && request.auth.token.email in ['urutoraktiti@gmail.com'];
+    //   allow delete: if false;
+    // }
+
+    // ===== 上記以外はすべて拒否 =====
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
