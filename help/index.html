@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>データを守る・引き継ぐ｜仕訳トレーニングアプリ 使い方ガイド</title>
+<style>
+  :root{
+    --primary:#2563eb; --primary-dark:#1e40af; --line:#e2e8f0;
+    --bg:#f1f5f9; --ok:#059669; --warn:#d97706; --danger:#dc2626;
+    --ink:#1e293b; --muted:#64748b; --card:#ffffff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    color:var(--ink); line-height:1.8; margin:0; background:var(--bg);
+    -webkit-font-smoothing:antialiased; font-size:16px;
+  }
+  .wrap{max-width:680px; margin:0 auto; padding:20px 16px 72px;}
+  header.doc{
+    background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:#fff;
+    border-radius:18px; padding:26px 22px; margin-bottom:22px;
+    box-shadow:0 10px 26px rgba(37,99,235,.22);
+  }
+  header.doc .ey{font-size:.8rem; opacity:.9; letter-spacing:.05em; margin-bottom:6px;}
+  header.doc h1{margin:0 0 10px; font-size:1.4rem; line-height:1.45;}
+  header.doc p{margin:0; font-size:.95rem; opacity:.95;}
+  h2{
+    font-size:1.18rem; color:var(--primary-dark); margin:30px 0 12px;
+    display:flex; align-items:center; gap:10px;
+  }
+  h2 .n{
+    flex:0 0 auto; width:30px; height:30px; background:var(--primary); color:#fff;
+    border-radius:9px; display:flex; align-items:center; justify-content:center;
+    font-size:.95rem; font-weight:800;
+  }
+  p{margin:10px 0;}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:18px 18px; margin:14px 0; box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .code-chip{
+    display:inline-block; font-family:"SF Mono",Consolas,Menlo,monospace;
+    background:#0f172a; color:#e2e8f0; padding:5px 12px; border-radius:8px;
+    font-size:.95rem; letter-spacing:.03em; word-break:break-all;
+  }
+  .btn{
+    display:inline-block; background:#eef2ff; color:var(--primary-dark);
+    border:1px solid #c7d2fe; border-radius:8px; padding:3px 10px;
+    font-size:.9rem; font-weight:700; white-space:nowrap;
+  }
+  ol.steps{list-style:none; counter-reset:step; padding:0; margin:0;}
+  ol.steps>li{
+    counter-increment:step; position:relative;
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:16px 16px 16px 60px; margin:12px 0; box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  ol.steps>li::before{
+    content:counter(step); position:absolute; left:14px; top:14px;
+    width:32px; height:32px; background:var(--primary); color:#fff;
+    border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:1rem;
+  }
+  ol.steps>li h3{margin:0 0 6px; font-size:1.05rem;}
+  ol.steps>li p{margin:6px 0;}
+  .box{
+    border-left:5px solid var(--primary); background:#eff6ff;
+    padding:14px 16px; border-radius:0 10px 10px 0; margin:14px 0; font-size:.95rem;
+  }
+  .box.warn{border-left-color:var(--warn); background:#fffbeb;}
+  .box.danger{border-left-color:var(--danger); background:#fef2f2;}
+  .box.ok{border-left-color:var(--ok); background:#ecfdf5;}
+  .box .bt{font-weight:800; display:block; margin-bottom:4px;}
+  ul.tight{margin:8px 0; padding-left:22px;}
+  ul.tight li{margin:7px 0;}
+  .big{font-size:1.05rem; font-weight:700;}
+  .tldr{
+    background:#fff7ed; border:1px solid #fed7aa; border-radius:14px;
+    padding:16px 18px; margin:0 0 22px;
+  }
+  .tldr .bt{color:#9a3412; font-weight:800; display:block; margin-bottom:6px;}
+  .divider{height:1px; background:var(--line); margin:30px 0;}
+  footer.doc{margin-top:34px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:.85rem; text-align:center;}
+  a{color:var(--primary-dark);}
+  @media print{
+    body{background:#fff;}
+    .wrap{max-width:100%; padding:0;}
+    header.doc{box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    ol.steps>li,.card{box-shadow:none; page-break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="ey">日商簿記2級 仕訳トレーニングアプリ</div>
+  <h1>成績データを守る・新しいスマホに引き継ぐ方法</h1>
+  <p>「同期コード」を最初にメモしておくだけで、機種変更やデータ消去があっても学習記録を守れます。</p>
+</header>
+
+<div class="tldr">
+  <span class="bt">⏱ いそがしい人へ（30秒まとめ）</span>
+  <ul class="tight" style="margin-bottom:0">
+    <li>アプリのホームで <span class="btn">☁ クラウド同期</span> を開く</li>
+    <li><span class="btn">同期コードを発行</span> を押す → <span class="code-chip">BK2-XXXX-XXXX-XXXX</span> が出る</li>
+    <li>そのコードを<strong>スクショ＋メモアプリ</strong>に保存（これで安心！）</li>
+  </ul>
+</div>
+
+<h2><span class="n">?</span>そもそも「同期コード」って？</h2>
+<div class="card">
+  <p>あなたの学習記録（点数や履歴）は、ふだん<strong>使っているスマホ・ブラウザの中だけ</strong>に保存されています。そのため、次のようなときに<strong>記録が消えてしまう</strong>ことがあります。</p>
+  <ul class="tight">
+    <li>スマホを<strong>機種変更</strong>した</li>
+    <li>ブラウザの<strong>データ（キャッシュ）を消した</strong></li>
+    <li>アプリを別の端末・別のブラウザで開いた</li>
+  </ul>
+  <p>そこで役に立つのが <strong>同期コード</strong> です。<span class="code-chip">BK2-XXXX-XXXX-XXXX</span> のような<strong>あなた専用の合言葉</strong>で、これを新しい端末に入力すると、記録をそっくり引き継げます。</p>
+  <div class="box danger">
+    <span class="bt">⚠ いちばん大事なこと</span>
+    <strong>同期コードを一度も発行しないまま</strong>データが消えると、<strong>記録は元に戻せません</strong>。だから「消える前に」コードを発行してメモしておくことが何より大切です。
+  </div>
+</div>
+
+<h2><span class="n">1</span>最初にやること（データを守る）</h2>
+<p>アプリを使い始めたら、<strong>いちばん最初に</strong>この3ステップをやっておきましょう。1回やれば大丈夫です。</p>
+<ol class="steps">
+  <li>
+    <h3>大学名・学籍番号を登録する</h3>
+    <p>ホーム画面の<strong>ユーザー情報</strong>で、あなたの<strong>大学</strong>と<strong>学籍番号</strong>を入れて「保存」します。</p>
+    <div class="box ok" style="margin:8px 0 0">
+      <span class="bt">なぜ？</span>もしコードを無くしても、先生（アプリの管理者）が<strong>大学名と学籍番号</strong>を手がかりにあなたのコードを探せます。正しく入れておきましょう。
+    </div>
+  </li>
+  <li>
+    <h3>同期コードを発行する</h3>
+    <p>ホームの <span class="btn">☁ クラウド同期</span> を開き、<span class="btn">同期コードを発行</span> を押します。<br>
+    <span class="code-chip">BK2-XXXX-XXXX-XXXX</span> という<strong>あなた専用のコード</strong>が表示されます。</p>
+  </li>
+  <li>
+    <h3>コードを「2か所以上」に保存する</h3>
+    <p>表示されたコードを、<strong>忘れても大丈夫なように複数の場所</strong>にメモします。おすすめは次の合わせ技です。</p>
+    <ul class="tight" style="margin-top:4px">
+      <li>📷 <strong>スクリーンショット</strong>を撮る（写真フォルダに残る）</li>
+      <li>📝 <strong>メモアプリ</strong>に貼り付ける（<span class="btn">📋 コピー</span>ボタンでコピーできます）</li>
+      <li>✉️ <strong>自分あてにメールやLINE</strong>で送っておく</li>
+    </ul>
+    <div class="box" style="margin:8px 0 0">
+      <span class="bt">ヒント</span>1か所だけだと、そのメモを無くしたときに困ります。<strong>スクショ＋メモアプリ</strong>のように2か所あると安心です。
+    </div>
+  </li>
+</ol>
+<div class="box ok">
+  <span class="bt">✅ これで準備完了！</span>あとはふだんどおり問題を解くだけ。学習記録は<strong>自動でクラウドに保存</strong>されていきます（「✅ 同期済み」と表示されます）。
+</div>
+
+<h2><span class="n">2</span>新しいスマホに引き継ぐ（復元）</h2>
+<p>機種変更したときや、記録が消えてしまったときは、メモしておいたコードで元に戻せます。</p>
+<ol class="steps">
+  <li>
+    <h3>新しい端末でアプリを開く</h3>
+    <p>これまでと同じアプリのURL（またはQRコード）から、新しいスマホ・パソコンでアプリを開きます。</p>
+  </li>
+  <li>
+    <h3>「コードを入力して復元」を押す</h3>
+    <p>ホームの <span class="btn">☁ クラウド同期</span> を開き、<span class="btn">コードを入力して復元</span> を押します。</p>
+  </li>
+  <li>
+    <h3>メモしておいたコードを入力する</h3>
+    <p>保存しておいた <span class="code-chip">BK2-XXXX-XXXX-XXXX</span> を入力します。<strong>0（ゼロ）とO（オー）</strong>の入れ間違いや、ハイフンの位置に気をつけてください。</p>
+    <div class="box warn" style="margin:8px 0 0">
+      <span class="bt">確認メッセージが出たら</span>「この端末の記録をクラウドの記録で置き換えます。よろしいですか？」と聞かれたら<strong>OK</strong>を選びます（新しい端末なので置き換えて大丈夫です）。
+    </div>
+  </li>
+  <li>
+    <h3>復元完了！</h3>
+    <p>「復元しました」と出れば成功です。以後この端末でも<strong>自動で同期</strong>されるようになります。元のコードは引き続き大切に保管しておきましょう。</p>
+  </li>
+</ol>
+
+<div class="divider"></div>
+
+<h2><span class="n">!</span>困ったとき・気をつけること</h2>
+
+<div class="card">
+  <p class="big">🔑 コードを無くしてしまった…</p>
+  <p>あわてなくて大丈夫です。まずは<strong>スクショ・メモアプリ・メール・LINE</strong>など、保存しそうな場所をもう一度探してみましょう。<br>
+  どうしても見つからないときは、<strong>先生（アプリの管理者）に連絡</strong>してください。<strong>あなたの大学名と学籍番号</strong>を伝えれば、コードを調べてもらえます（※アプリに大学名・学籍番号を登録していた場合）。</p>
+</div>
+
+<div class="box danger">
+  <span class="bt">🚫 やってはいけないこと</span>
+  <ul class="tight" style="margin-bottom:0">
+    <li><strong>コードを発行しないまま</strong>、ブラウザのデータを消す／機種変更する（記録が戻せなくなります）</li>
+    <li>同期コードを<strong>他の人に教える</strong>（コードを知っていると、その人があなたの記録を見られてしまいます。自分だけの合言葉として大切に）</li>
+  </ul>
+</div>
+
+<div class="box">
+  <span class="bt">💡 知っておくと安心</span>
+  <ul class="tight" style="margin-bottom:0">
+    <li>コードは<strong>1人1つ</strong>でずっと使えます。毎回発行し直す必要はありません。</li>
+    <li>同じコードを入れれば、<strong>スマホでもパソコンでも</strong>同じ記録で学習できます。</li>
+    <li>通信環境が悪いと同期が一時的に止まることがありますが、学習自体は続けられます。電波の良いところで開けば自動で同期されます。</li>
+  </ul>
+</div>
+
+<footer class="doc">
+  日商簿記2級 仕訳トレーニングアプリ｜学習データの保存・引き継ぎガイド<br>
+  わからないことがあれば先生に気軽に聞いてください。
+</footer>
+
+</div>
+</body>
+</html>
