@@ -62,7 +62,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.0</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.1</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -110,7 +110,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, getDocs }
+import { getFirestore, collection, getDocs, doc, deleteDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ===== 設定 ===== */
@@ -334,8 +334,38 @@ function toggleDetail(tr, r) {
     <div style="margin-bottom:6px"><b>${esc(r.univ)}｜${esc(r.sid)}</b>
       <span class="muted">（同期コード：${esc(r.code)}）</span></div>
     <div class="detail-grid">${chips}</div>
+    <div style="margin-top:10px; border-top:1px solid #e2e8f0; padding-top:8px">
+      <button class="row-del-btn" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; border-radius:8px; padding:6px 14px; font-size:.82rem; cursor:pointer">🗑 この記録を削除</button>
+    </div>
   </td>`;
   tr.after(row);
+  row.querySelector(".row-del-btn").onclick = () => deleteRow(r);
+}
+
+/* 記録の削除（学籍番号の一致確認つき）。クラウドの1件のみ削除。学生の端末データは消えない */
+async function deleteRow(r) {
+  const input = prompt(
+    "この学生の記録を【クラウドから】削除します。\n\n"
+    + `大学：${r.univ}\n学籍番号：${r.sid}\n同期コード：${r.code}\n\n`
+    + "※学生の端末内のデータは消えません。もしその学生が再びアプリを使うと、端末から再同期されて復活する場合があります。\n\n"
+    + `削除するには、確認のため学籍番号「${r.sid}」を入力してください。`
+  );
+  if (input === null) return;
+  if (input.trim() !== String(r.sid)) {
+    alert("学籍番号が一致しませんでした。削除を中止しました。");
+    return;
+  }
+  try {
+    await deleteDoc(doc(db, SYNC_COLLECTION, r.code));
+    const idx = ROWS.indexOf(r);
+    if (idx >= 0) ROWS.splice(idx, 1);
+    render();
+    $("load-msg").textContent = `${ROWS.length}名（削除しました）`;
+    alert("削除しました。");
+  } catch (e) {
+    alert("削除に失敗しました：" + (e.code || e.message)
+      + "\n\nFirestoreのセキュリティルールで、管理者に delete 権限が付いているか（公開済みか）ご確認ください。");
+  }
 }
 
 /* ===== CSV ===== */
