@@ -74,7 +74,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.3</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.4</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -164,11 +164,13 @@ let sortKey = "univ";
 let sortAsc = true;
 
 /* ===== 課題（管理者が配信する5問セット） ===== */
-const ASSIGN_DOC = "__assignments__";   // boki2_sync 内の予約ドキュメント（ルール変更不要）
+const ASSIGN_DOC = "assignments-config";   // boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない）
 const META_URL = "../src/問題セット_第1問特集①-⑨.json";  // 問題メタ（group→問→qid→label）の取得元
 const META_SETKEY = "第1問特集①〜⑨";    // qid の接頭辞（生徒アプリの installSet と一致）
+/* 大学の選択肢（生徒アプリの UNIVERSITIES と一致。生徒未登録の大学も選べるように固定リストを用意） */
+const UNIVERSITIES = ["学習院大学", "日本大学経済学部", "日本大学商学部", "東洋大学", "駒澤大学", "専修大学"];
 let META = [];          // [{qid, group, label, points}]
-let ASSIGN_DEFS = [];   // __assignments__ の assignments 配列
+let ASSIGN_DEFS = [];   // 課題定義ドキュメントの assignments 配列
 let editingId = null;   // 編集中の課題ID（新規は null）
 
 /* ===== 認証 ===== */
@@ -217,8 +219,8 @@ async function loadData() {
       const f = doc.data();
       let data = {};
       try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
-      // 予約ドキュメント（課題定義など）は学生行に入れない
-      if (doc.id.startsWith("__")) {
+      // 課題定義ドキュメント（および万一の予約ID）は学生行に入れない
+      if (doc.id === ASSIGN_DOC || doc.id.startsWith("__")) {
         if (doc.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
         return;
       }
@@ -447,7 +449,9 @@ async function loadProblemMeta() {
 }
 
 function currentUnivs() {
-  return [...new Set(ROWS.map(r => r.univ).filter(u => u && u !== "（未登録）"))].sort((a, b) => a.localeCompare(b, "ja"));
+  // 固定リスト（生徒未登録の大学も選べる）＋ 実データに現れた大学 を統合
+  const fromData = ROWS.map(r => r.univ).filter(u => u && u !== "（未登録）");
+  return [...new Set([...UNIVERSITIES, ...fromData])].sort((a, b) => a.localeCompare(b, "ja"));
 }
 function targetLabel(t) {
   t = t || { mode: "all" };
