@@ -59,7 +59,10 @@
   .answer-table th{background:#f0f4f9; font-weight:600;}
   .answer-table td.amt{text-align:right; font-variant-numeric:tabular-nums;}
   .expl{background:#fffbe8; border:1px solid #eadfa8; border-radius:8px; padding:12px; margin-top:12px; font-size:.88rem; white-space:pre-wrap;}
-  .progress{font-size:.85rem; color:var(--sub); text-align:center; margin-bottom:10px;}
+  .progress{font-size:.85rem; color:var(--sub); text-align:center; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:10px;}
+  #stopwatch{display:inline-flex; align-items:center; gap:4px; font-variant-numeric:tabular-nums; font-weight:700; color:var(--primary); background:#eef4ff; border:1px solid #d5e2ff; border-radius:999px; padding:2px 10px; font-size:.9rem;}
+  #stopwatch.frozen{color:var(--sub); background:#f2f1ec; border-color:var(--line);}
+  .qtime{color:var(--sub); font-size:.72rem; font-weight:400;}
   /* 成績 */
   .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px;}
   .stat-box{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 8px; text-align:center;}
@@ -126,7 +129,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.8</span></h1>
+    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.9</span></h1>
     <p>仕訳問題対策</p>
   </header>
   <div id="err-banner" style="display:none; background:#fdeeee; color:#d94f4f; border:1px solid #f2c9c9; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:.82rem; word-break:break-all"></div>
@@ -256,8 +259,12 @@ function isWrongNow(qid){ const r=lastResult(qid); return r===false; }
 function showView(v){
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.view===v));
   ["home","quiz","stats"].forEach(x=>document.getElementById("view-"+x).style.display = x===v?"":"none");
+  if(v!=="quiz") pauseTimer();               /* 解答画面を離れたらタイマー停止 */
   if(v==="stats") renderStats();
-  if(v==="quiz" && !session) startQuiz("all");
+  if(v==="quiz"){
+    if(!session) startQuiz("all");
+    else beginTimer();                       /* 「解答中の問題に戻る」等からの再開 */
+  }
   if(v==="home") updateHome();
 }
 /* ===== ユーザー情報（大学名・学籍番号） ===== */
@@ -596,7 +603,7 @@ function renderQuestion(){
   const optHtml=Object.entries(q.options).map(([k,v])=>`<div>${k}．${v}</div>`).join("");
   const el=document.getElementById("view-quiz");
   el.innerHTML=`
-   <div class="progress">${session.idx+1} / ${session.list.length} 問目</div>
+   <div class="progress"><span>${session.idx+1} / ${session.list.length} 問目</span><span id="stopwatch">00:00</span></div>
    <div class="card">
      <div class="qhead">
        <span class="qnum">${esc(effLabel(q))}</span>
@@ -630,6 +637,54 @@ function renderQuestion(){
      </div>
    </div>`;
   restoreRows();
+  beginTimer();
+}
+
+/* ===== 解答ストップウォッチ（問題ごとの所要時間を計測） ===== */
+let tTick=null; /* 表示更新の setInterval ハンドル */
+function beginTimer(){
+  if(!session) return;
+  session.times ??= [];
+  session.tFrozen ??= [];
+  clearInterval(tTick);
+  swDisplay();
+  if(session.tFrozen[session.idx]) return;   /* 採点済み＝凍結。計測はしない */
+  session.tIdx=session.idx;
+  session.tStart=Date.now();
+  tTick=setInterval(swDisplay,500);
+}
+function pauseTimer(){
+  if(session && session.tStart!=null){
+    session.times ??= [];
+    session.times[session.tIdx]=(session.times[session.tIdx]||0)+(Date.now()-session.tStart);
+    session.tStart=null;
+  }
+  clearInterval(tTick);
+}
+function swElapsed(idx){
+  if(!session) return 0;
+  const acc=(session.times&&session.times[idx])||0;
+  const run=(session.tStart!=null && session.tIdx===idx)? (Date.now()-session.tStart) : 0;
+  return acc+run;
+}
+function swDisplay(){
+  const el=document.getElementById("stopwatch");
+  if(!el||!session) return;
+  el.textContent=fmtClock(swElapsed(session.idx));
+  el.classList.toggle("frozen", !!(session.tFrozen&&session.tFrozen[session.idx]));
+}
+function fmtClock(ms){
+  const s=Math.floor((ms||0)/1000);
+  return `⏱ ${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+function fmtDur(ms){
+  if(ms==null) return "−";
+  const s=Math.round(ms/1000), m=Math.floor(s/60), r=s%60;
+  return m? `${m}分${r}秒` : `${r}秒`;
+}
+function fmtDiff(ms){ /* 前回比（速い＝マイナスを改善として符号付き表示） */
+  const sign=ms>0? "+" : (ms<0? "−" : "±");
+  return sign+fmtDur(Math.abs(ms));
 }
 
 /* 金額プルダウン候補：問題文中の金額＋正解金額（直接入力も可能） */
@@ -668,12 +723,13 @@ function saveCurrent(){
   const a=session.answers[session.idx] ??= {graded:false,correct:false};
   a.d=readRows("debit"); a.c=readRows("credit");
 }
-function goPrev(){ saveCurrent(); session.idx--; renderQuestion(); window.scrollTo({top:0,behavior:"smooth"}); }
-function goNext(){ saveCurrent(); session.idx++; renderQuestion(); window.scrollTo({top:0,behavior:"smooth"}); }
+function goPrev(){ pauseTimer(); saveCurrent(); session.idx--; renderQuestion(); window.scrollTo({top:0,behavior:"smooth"}); }
+function goNext(){ pauseTimer(); saveCurrent(); session.idx++; renderQuestion(); window.scrollTo({top:0,behavior:"smooth"}); }
 function goFinish(){ saveCurrent(); finish(); }
 /* 解答中にホームへ戻る（3択の確認ポップアップ） */
 function confirmQuit(){
   if(!session) { showView("home"); return; }
+  pauseTimer();
   saveCurrent();
   const bg=document.createElement("div");
   bg.className="modal-bg";
@@ -691,8 +747,8 @@ function confirmQuit(){
   const close=()=>bg.remove();
   bg.querySelector("#q-save").onclick=()=>{ close(); showView("home"); window.scrollTo({top:0,behavior:"smooth"}); };
   bg.querySelector("#q-discard").onclick=()=>{ session=null; close(); showView("home"); window.scrollTo({top:0,behavior:"smooth"}); };
-  bg.querySelector("#q-cancel").onclick=close;
-  bg.onclick=e=>{ if(e.target===bg) close(); };
+  bg.querySelector("#q-cancel").onclick=()=>{ close(); beginTimer(); };  /* 解答に戻る＝計測再開 */
+  bg.onclick=e=>{ if(e.target===bg){ close(); beginTimer(); } };
 }
 function recalcSession(){
   const ans=session.answers||[];
@@ -751,8 +807,11 @@ function grade(){
   saveCurrent();
   const correct = sameEntries(d,q.debit) && sameEntries(c,q.credit);
   const a=session.answers[session.idx]; a.graded=true; a.correct=correct;
+  pauseTimer();                                   /* 採点＝回答終了時刻で計測確定 */
+  session.tFrozen ??= []; session.tFrozen[session.idx]=true;
+  swDisplay();
   recalcSession();
-  store.history.push({qid:q.id, correct, date:new Date().toISOString().slice(0,10)});
+  store.history.push({qid:q.id, correct, date:new Date().toISOString().slice(0,10), ms:(session.times&&session.times[session.idx])||0});
   saveStore(store);
 
   const tbl=`<table class="answer-table">
@@ -779,6 +838,7 @@ function grade(){
   document.getElementById("result-area").scrollIntoView({behavior:"smooth"});
 }
 function finish(){
+  pauseTimer();                                   /* 計測中の問題ぶんを確定 */
   /* 未採点の問題をまとめて採点（未入力は不正解扱い） */
   session.answers ??= [];
   session.list.forEach((q,i)=>{
@@ -786,15 +846,17 @@ function finish(){
     if(!a.graded){
       a.correct=!!(a.d&&a.c&&a.d.length&&a.c.length&&sameEntries(a.d,q.debit)&&sameEntries(a.c,q.credit));
       a.graded=true;
-      store.history.push({qid:q.id, correct:a.correct, date:new Date().toISOString().slice(0,10)});
+      store.history.push({qid:q.id, correct:a.correct, date:new Date().toISOString().slice(0,10), ms:(session.times&&session.times[i])||0});
     }
   });
   saveStore(store);
   recalcSession();
   const s=session; session=null;
+  const times=s.times||[];
+  const totalMs=times.reduce((a,b)=>a+(b||0),0);
   /* 回別テストの結果を記録（成長ダッシュボード用） */
   if(s.scored && s.groupName){
-    (store.tests ??= []).push({group:s.groupName, score:s.score, max:s.max, correct:s.correct, total:s.list.length, date:new Date().toISOString().slice(0,10)});
+    (store.tests ??= []).push({group:s.groupName, score:s.score, max:s.max, correct:s.correct, total:s.list.length, date:new Date().toISOString().slice(0,10), timeMs:totalMs});
     saveStore(store);
   }
   const el=document.getElementById("view-quiz");
@@ -802,6 +864,7 @@ function finish(){
     const a=s.answers[i];
     return `<div class="qstat">
       <div class="name" style="text-align:left">${esc(effLabel(q))}<small>${esc(q.topic)}</small></div>
+      <span class="qtime">${fmtDur(times[i]||0)}</span>
       ${s.scored? `<span style="font-size:.78rem; color:var(--sub)">${a.correct?(q.points||0):0}/${q.points||0}点</span>`:""}
       <span style="font-size:1.1rem">${a.correct?"⭕":"❌"}</span>
     </div>`;}).join("");
@@ -813,6 +876,7 @@ function finish(){
   el.innerHTML=`<div class="card" style="text-align:center">
     <h2 style="color:var(--primary); margin-bottom:8px">お疲れさまでした！</h2>
     ${scoreHtml}
+    <p style="font-size:.95rem; font-weight:600; color:var(--primary); margin-top:4px">⏱ トータル所要時間 ${fmtDur(totalMs)}</p>
     <p style="color:var(--sub); font-size:.9rem">${s.correct===s.list.length?"全問正解です🎉":"不正解の問題は復習モードで繰り返し解きましょう。"}</p>
     <div style="text-align:left; margin-top:14px; border-top:1px solid var(--line); padding-top:6px">${detail}</div>
     <div class="btns">
@@ -848,8 +912,10 @@ function renderStats(){
   const qRows=allQ().map((q,i)=>{
     const qs=qHistory(q.id); const o=qs.filter(x=>x.correct).length;
     const rate=qs.length? Math.round(o/qs.length*100) : null;
+    const tRec=qs.filter(x=>x.ms!=null);          /* 所要時間の記録があるものだけ平均 */
+    const avgMs=tRec.length? tRec.reduce((a,x)=>a+x.ms,0)/tRec.length : null;
     return `<div class="qstat">
-      <div class="name">${esc(effLabel(q))}<small>${esc(effCat(q))}｜${esc(q.topic)}</small></div>
+      <div class="name">${esc(effLabel(q))}<small>${esc(effCat(q))}｜${esc(q.topic)}${avgMs!=null?`｜平均 ${fmtDur(avgMs)}`:""}</small></div>
       <div class="bar"><i style="width:${rate??0}%"></i></div>
       <div class="rate">${rate===null?"未解答":rate+"%"} <span style="color:var(--sub);font-weight:400;font-size:.72rem">(${o}/${qs.length})</span></div>
       ${isWrongNow(q.id)? `<button class="retry-chip" onclick="retryOne('${q.id}')">復習</button>`:""}
@@ -1123,12 +1189,25 @@ function groupDashboard(){
     const last=tests[tests.length-1];
     const best=tests.length? Math.max(...tests.map(t=>t.score)) : null;
     const bars=tests.slice(-12).map(t=>
-      `<i title="${t.date} ${t.score}点" style="height:${Math.max(t.score/t.max*100,4)}%; background:${t.score>=t.max*0.7?'var(--ok)':(t.score>=t.max*0.4?'var(--primary)':'var(--ng)')}"></i>`).join("");
+      `<i title="${t.date} ${t.score}点${t.timeMs!=null?" ／ "+fmtDur(t.timeMs):""}" style="height:${Math.max(t.score/t.max*100,4)}%; background:${t.score>=t.max*0.7?'var(--ok)':(t.score>=t.max*0.4?'var(--primary)':'var(--ng)')}"></i>`).join("");
+    /* 所要時間の前回比（速い＝改善＝緑／遅い＝赤。timeMs を持つ挑戦のみ対象） */
+    const wt=tests.filter(t=>t.timeMs!=null);
+    const lt=wt[wt.length-1], pt=wt[wt.length-2];
+    let timeHtml="";
+    if(lt){
+      let diff="";
+      if(pt){
+        const d=lt.timeMs-pt.timeMs;
+        const col=d<0?"var(--ok)":(d>0?"var(--ng)":"var(--sub)");
+        diff=`｜前回比 <span style="color:${col}">${fmtDiff(d)}</span>`;
+      }
+      timeHtml=`<small>⏱ 直近所要 ${fmtDur(lt.timeMs)}${diff}</small>`;
+    }
     return `<div class="qstat">
       <div class="name">${esc(g)}
         <small>${tests.length
           ? `挑戦${tests.length}回｜最高 ${best}点｜直近 ${last.score}/${last.max}点${tests.length>=2? (last.score-tests[tests.length-2].score>=0? `｜前回比 +${last.score-tests[tests.length-2].score}点`:`｜前回比 ${last.score-tests[tests.length-2].score}点`):""}`
-          : "まだ挑戦していません"}</small>
+          : "まだ挑戦していません"}</small>${timeHtml}
       </div>
       <div class="mini">${bars||'<span style="font-size:.7rem;color:var(--sub)">−</span>'}</div>
       <button class="retry-chip" style="border-color:var(--primary); color:var(--primary)" onclick="openGroupPicker('${esc(g)}')">挑戦</button>
@@ -1285,6 +1364,11 @@ initProfile();
 if(store.profile){ const tgl=document.getElementById("profile-toggle"); if(tgl) tgl.textContent="👤 ユーザー情報（登録済み） ▼"; }
 updateHome();
 initSync();
+/* 別タブ・バックグラウンドに離れている間はストップウォッチを一時停止（戻ったら再開） */
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){ pauseTimer(); }
+  else if(session && document.getElementById("view-quiz").style.display!=="none"){ beginTimer(); }
+});
 /* 初回起動時に未登録なら入力を必須で促す */
 requireProfile();
 </script>
