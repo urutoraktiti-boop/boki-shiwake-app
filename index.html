@@ -129,7 +129,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.11配布版</span></h1>
+    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.12配布版</span></h1>
     <p>仕訳問題対策</p>
   </header>
   <div id="err-banner" style="display:none; background:#fdeeee; color:#d94f4f; border:1px solid #f2c9c9; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:.82rem; word-break:break-all"></div>
@@ -354,7 +354,21 @@ function requireProfile(){
 function commitProfile(univ,sid){
   if(!univ||!sid){ alert("大学名と学籍番号を入力してください。"); return false; }
   store.profile={univ,sid}; saveStore(store); showProfileStatus();
+  ensureSyncCode();      /* 登録したら自動で同期コードを発行しクラウドへ（管理者ダッシュボードに自動で出る） */
   renderAssignments();   /* 大学・学籍番号が変わると対象の課題も変わるため再描画 */
+  return true;
+}
+/* プロフィール登録済みで同期コードが無ければ自動発行し、端末内の記録をクラウドへ保存する（v3.12）。
+   これにより生徒が「同期コードを発行」を押さなくても全員が管理者ダッシュボードに出る。
+   機種変更用の同期コードは従来どおり 設定→クラウド同期 で確認できる。 */
+function ensureSyncCode(){
+  if(!syncReady()) return false;
+  if(!store.profile || !store.profile.univ || !store.profile.sid) return false;
+  if(store.sync && store.sync.code) return false;
+  store.sync={code:genCode()};
+  saveStore(store);
+  renderSync();
+  cloudSave();           /* 端末内の記録を即アップロード */
   return true;
 }
 function saveProfile(){
@@ -1431,6 +1445,9 @@ initProfile();
 if(store.profile){ const tgl=document.getElementById("profile-toggle"); if(tgl) tgl.textContent="👤 ユーザー情報（登録済み） ▼"; }
 updateHome();
 initSync();
+/* 既に大学・学籍番号を登録済みだが同期コード未発行の生徒も、次回起動時に自動でコード発行＆
+   端末内の記録をクラウドへアップロード（＝管理者ダッシュボードに出るようにする・v3.12） */
+ensureSyncCode();
 /* 管理者からの課題を取得してホームに反映（非同期・取得できなくても他機能に影響しない） */
 loadAssignments().then(renderAssignments);
 /* 別タブ・バックグラウンドに離れている間はストップウォッチを一時停止（戻ったら再開） */
