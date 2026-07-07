@@ -54,6 +54,18 @@
   .detail-grid{display:flex; flex-wrap:wrap; gap:8px;}
   .detail-chip{border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:.8rem; background:#fff;}
   .err{color:var(--ng); font-weight:600;}
+  /* 課題（アサインメント） */
+  .sec-title{font-size:1rem; font-weight:700; color:var(--primary-dark); margin:0 0 10px;}
+  .assign-picker{border:1px solid var(--line); border-radius:10px; padding:10px; margin:10px 0; max-height:320px; overflow:auto; background:#fafcfe;}
+  .assign-group{margin-bottom:8px;}
+  .assign-group > b{display:block; font-size:.82rem; color:var(--primary-dark); margin-bottom:4px;}
+  .assign-q{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; margin:0 6px 6px 0; font-size:.8rem; background:#fff; cursor:pointer;}
+  .assign-q input{margin:0;}
+  .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
+  .assign-row-form input, .assign-row-form select, .assign-row-form textarea{width:100%; max-width:420px; font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
+  .assign-list-item{border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fff; font-size:.84rem;}
+  .mk-o{color:var(--ok); font-weight:700;}
+  .mk-x{color:var(--ng); font-weight:700;}
   .foot{color:var(--sub); font-size:.78rem; text-align:center; margin-top:18px;}
   a{color:var(--primary);}
 </style>
@@ -62,7 +74,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.1</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.2</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -98,6 +110,21 @@
         </table>
       </div>
     </div>
+
+    <!-- 課題の作成・管理 -->
+    <div class="card">
+      <div class="sec-title">📌 課題の作成・管理</div>
+      <p class="muted" style="margin-top:0">問題①〜⑨の中から問を選んで「課題」を作り、対象（全員／大学／学籍番号）を決めて公開すると、生徒アプリのホームに自動で表示されます。</p>
+      <button id="assign-new-btn" class="primary">＋ 新しい課題を作る</button>
+      <div id="assign-form" style="display:none"></div>
+      <div id="assign-list" style="margin-top:12px"></div>
+    </div>
+
+    <!-- 課題の結果 -->
+    <div class="card">
+      <div class="sec-title">📌 課題の結果</div>
+      <div id="assign-results" class="tbl-scroll"></div>
+    </div>
   </div>
 
   <p class="foot">
@@ -110,7 +137,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, deleteDoc }
+import { getFirestore, collection, getDocs, doc, deleteDoc, setDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ===== 設定 ===== */
@@ -136,6 +163,14 @@ let GROUPS = [];     // 列に使う回別テスト名（① 〜 の順）
 let sortKey = "univ";
 let sortAsc = true;
 
+/* ===== 課題（管理者が配信する5問セット） ===== */
+const ASSIGN_DOC = "__assignments__";   // boki2_sync 内の予約ドキュメント（ルール変更不要）
+const META_URL = "../src/問題セット_第1問特集①-⑨.json";  // 問題メタ（group→問→qid→label）の取得元
+const META_SETKEY = "第1問特集①〜⑨";    // qid の接頭辞（生徒アプリの installSet と一致）
+let META = [];          // [{qid, group, label, points}]
+let ASSIGN_DEFS = [];   // __assignments__ の assignments 配列
+let editingId = null;   // 編集中の課題ID（新規は null）
+
 /* ===== 認証 ===== */
 $("login-btn").onclick = async () => {
   $("login-msg").textContent = "";
@@ -156,7 +191,7 @@ onAuthStateChanged(auth, user => {
     if (allowed) {
       $("login-view").style.display = "none";
       $("main-view").style.display = "";
-      loadData();
+      loadProblemMeta().then(loadData);   // 問題メタを先に読み込んでから集計・描画（ラベル表示のため）
     } else {
       $("login-view").style.display = "";
       $("main-view").style.display = "none";
@@ -176,16 +211,32 @@ async function loadData() {
   try {
     const snap = await getDocs(collection(db, SYNC_COLLECTION));
     ROWS = [];
+    ASSIGN_DEFS = [];
     const groupSet = new Set();
     snap.forEach(doc => {
       const f = doc.data();
       let data = {};
       try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
+      // 予約ドキュメント（課題定義など）は学生行に入れない
+      if (doc.id.startsWith("__")) {
+        if (doc.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
+        return;
+      }
       const tests = Array.isArray(data.tests) ? data.tests : [];
-      // 回別テストごとに「最高点」を集計
-      const best = {};   // group -> {score, max, attempts, last}
+      // 回別テストごとに「最高点」を集計（課題レコードは除外）
+      const best = {};        // group -> {score, max, attempts, last}
+      const assignBest = {};  // assignmentId -> {score, max, attempts, last, detail}
       tests.forEach(t => {
-        if (!t || !t.group) return;
+        if (!t) return;
+        if (t.assignmentId) {   // 課題の結果：メイン表とは別に集約
+          const a = assignBest[t.assignmentId] || { score: -1, max: t.max || 0, attempts: 0, last: null, detail: null };
+          a.attempts++;
+          a.last = t.date || a.last;
+          if ((t.score ?? 0) > a.score) { a.score = t.score; a.max = t.max || a.max; a.detail = t.detail || null; }
+          assignBest[t.assignmentId] = a;
+          return;
+        }
+        if (!t.group) return;
         groupSet.add(t.group);
         const b = best[t.group] || { score: -1, max: t.max || 0, attempts: 0, last: null };
         b.attempts++;
@@ -199,12 +250,15 @@ async function loadData() {
         sid: f.sid || "（未登録）",
         updatedAt: Number(f.updatedAt || data.updatedAt || 0),
         best,
+        assignBest,
         attemptsTotal: tests.length
       });
     });
     GROUPS = [...groupSet].sort((a, b) => a.localeCompare(b, "ja"));
     buildUnivFilter();
     render();
+    renderAssignManage();
+    renderAssignResults();
     $("load-msg").textContent = `${ROWS.length}名 / 最終取得 ${new Date().toLocaleTimeString("ja-JP", { hour:"2-digit", minute:"2-digit" })}`;
   } catch (e) {
     $("load-msg").innerHTML = `<span class="err">取得エラー：${esc(e.code || e.message)}</span>`;
@@ -368,6 +422,234 @@ async function deleteRow(r) {
   }
 }
 
+/* ===== 課題（管理者が配信する問題セット） ===== */
+
+/* 問題メタ（group→問→qid→label）を取得。qid は生徒アプリの installSet と同じ規則で生成 */
+async function loadProblemMeta() {
+  if (META.length) return;
+  try {
+    const r = await fetch(META_URL);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const json = await r.json();
+    const qs = Array.isArray(json.questions) ? json.questions : [];
+    // qid は生徒アプリ installSet と同じ規則： setKey = セット名の空白を _ に置換 → `${setKey}_q{連番}`
+    const setKey = (json.name || META_SETKEY).replace(/\s+/g, "_");
+    META = qs.map((q, i) => ({
+      qid: `${setKey}_q${i + 1}`,
+      group: q.group || "その他",
+      label: q.label || ("問" + (i + 1)),
+      points: q.points || 0
+    }));
+  } catch (e) {
+    META = [];
+    console.warn("問題メタの取得に失敗:", e.message);
+  }
+}
+
+function currentUnivs() {
+  return [...new Set(ROWS.map(r => r.univ).filter(u => u && u !== "（未登録）"))].sort((a, b) => a.localeCompare(b, "ja"));
+}
+function targetLabel(t) {
+  t = t || { mode: "all" };
+  if (t.mode === "univ") return "大学：" + (t.univ || "?");
+  if (t.mode === "sids") return "学籍番号：" + (t.sids || []).join("・");
+  return "全員";
+}
+function matchTarget(r, t) {
+  t = t || { mode: "all" };
+  if (t.mode === "all") return true;
+  if (t.mode === "univ") return r.univ === t.univ;
+  if (t.mode === "sids") return (t.sids || []).map(String).includes(String(r.sid));
+  return false;
+}
+function qidLabel(qid) {
+  const m = META.find(x => x.qid === qid);
+  return m ? m.label : qid;   // 例：「特集① 問1」
+}
+
+/* 既存課題の一覧 */
+function renderAssignManage() {
+  const box = $("assign-list");
+  if (!box) return;
+  if (!ASSIGN_DEFS.length) {
+    box.innerHTML = `<p class="muted">まだ課題はありません。「＋ 新しい課題を作る」から作成してください。</p>`;
+    return;
+  }
+  box.innerHTML = ASSIGN_DEFS.map(a => `
+    <div class="assign-list-item">
+      <b>${esc(a.title || "課題")}</b>　<span class="muted">${esc(targetLabel(a.target))}｜${(a.qids || []).length}問</span>
+      <div class="muted" style="margin:4px 0">${(a.qids || []).map(q => esc(qidLabel(q))).join("／")}</div>
+      <button data-edit="${esc(a.id)}">✏ 編集</button>
+      <button data-del="${esc(a.id)}" style="color:#b91c1c; border-color:#fca5a5; background:#fee2e2">🗑 削除</button>
+    </div>`).join("");
+  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openAssignForm(b.dataset.edit));
+  box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => deleteAssignment(b.dataset.del));
+}
+
+/* 作成・編集フォーム */
+function openAssignForm(id) {
+  editingId = id || null;
+  const a = id ? ASSIGN_DEFS.find(x => x.id === id) : null;
+  const form = $("assign-form");
+  if (!META.length) {
+    form.style.display = "";
+    form.innerHTML = `<p class="err">問題データ（${esc(META_URL)}）を読み込めませんでした。ページを再読み込みしてください。</p>`;
+    return;
+  }
+  const selected = new Set(a ? (a.qids || []) : []);
+  const t = a ? (a.target || { mode: "all" }) : { mode: "all" };
+  // group ごとに問をまとめる
+  const groups = [...new Set(META.map(m => m.group))].sort((x, y) => x.localeCompare(y, "ja"));
+  const picker = groups.map(g => {
+    const items = META.filter(m => m.group === g).map(m =>
+      `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__assignCount()">${esc(m.label)}<span class="muted">(${m.points})</span></label>`
+    ).join("");
+    return `<div class="assign-group"><b>${esc(g)}</b>${items}</div>`;
+  }).join("");
+  const univOpts = currentUnivs().map(u => `<option value="${esc(u)}" ${t.mode === "univ" && t.univ === u ? "selected" : ""}>${esc(u)}</option>`).join("");
+  form.style.display = "";
+  form.innerHTML = `
+    <div class="assign-row-form" style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:10px; background:#f7fafd">
+      <label>課題名</label>
+      <input id="assign-title" type="text" placeholder="例：第2回 確認課題" value="${esc(a ? (a.title || "") : "")}">
+      <label>対象</label>
+      <select id="assign-mode">
+        <option value="all" ${t.mode === "all" ? "selected" : ""}>全員</option>
+        <option value="univ" ${t.mode === "univ" ? "selected" : ""}>特定の大学</option>
+        <option value="sids" ${t.mode === "sids" ? "selected" : ""}>特定の学籍番号（リスト）</option>
+      </select>
+      <div id="assign-univ-wrap" style="display:${t.mode === "univ" ? "" : "none"}">
+        <label>大学を選択</label>
+        <select id="assign-univ"><option value="">（選択してください）</option>${univOpts}</select>
+      </div>
+      <div id="assign-sids-wrap" style="display:${t.mode === "sids" ? "" : "none"}">
+        <label>学籍番号（カンマ・改行・スペース区切り）</label>
+        <textarea id="assign-sids" rows="3" placeholder="1001, 1002, 1003">${esc(t.mode === "sids" ? (t.sids || []).join(", ") : "")}</textarea>
+      </div>
+      <label>出題する問（①〜⑨から選択）　<span id="assign-count" class="muted"></span></label>
+      <div class="assign-picker">${picker}</div>
+      <div style="margin-top:10px">
+        <button id="assign-save" class="primary">保存して公開</button>
+        <button id="assign-cancel">キャンセル</button>
+        <span id="assign-msg" class="muted"></span>
+      </div>
+    </div>`;
+  $("assign-mode").onchange = () => {
+    const m = $("assign-mode").value;
+    $("assign-univ-wrap").style.display = m === "univ" ? "" : "none";
+    $("assign-sids-wrap").style.display = m === "sids" ? "" : "none";
+  };
+  $("assign-save").onclick = saveAssignment;
+  $("assign-cancel").onclick = () => { form.style.display = "none"; form.innerHTML = ""; editingId = null; };
+  window.__assignCount();
+}
+window.__assignCount = function () {
+  const form = $("assign-form");
+  if (!form) return;
+  const checked = [...form.querySelectorAll(".assign-picker input:checked")];
+  const pts = checked.reduce((s, c) => { const m = META.find(x => x.qid === c.value); return s + (m ? m.points : 0); }, 0);
+  const el = $("assign-count");
+  if (el) el.textContent = `選択 ${checked.length}問・${pts}点`;
+};
+
+async function saveAssignment() {
+  const form = $("assign-form");
+  const title = $("assign-title").value.trim();
+  const mode = $("assign-mode").value;
+  const qids = [...form.querySelectorAll(".assign-picker input:checked")].map(c => c.value);
+  if (!title) { $("assign-msg").innerHTML = `<span class="err">課題名を入力してください。</span>`; return; }
+  if (!qids.length) { $("assign-msg").innerHTML = `<span class="err">問題を1つ以上選んでください。</span>`; return; }
+  let target = { mode: "all" };
+  if (mode === "univ") {
+    const u = $("assign-univ").value;
+    if (!u) { $("assign-msg").innerHTML = `<span class="err">大学を選択してください。</span>`; return; }
+    target = { mode: "univ", univ: u };
+  } else if (mode === "sids") {
+    const sids = $("assign-sids").value.split(/[\s,、]+/).map(s => s.trim()).filter(Boolean);
+    if (!sids.length) { $("assign-msg").innerHTML = `<span class="err">学籍番号を入力してください。</span>`; return; }
+    target = { mode: "sids", sids };
+  }
+  $("assign-msg").textContent = "保存中…";
+  try {
+    // 最新の課題配列を読み直してから upsert（他端末での編集を保護）
+    let arr = [];
+    const snap = await getDoc(doc(db, SYNC_COLLECTION, ASSIGN_DOC));
+    if (snap.exists()) { try { arr = JSON.parse(snap.data().data).assignments || []; } catch (e) { arr = []; } }
+    const id = editingId || ("a" + Date.now());
+    const existing = arr.find(x => x.id === id);
+    const rec = { id, title, target, qids, createdAt: existing ? existing.createdAt : Date.now() };
+    if (existing) Object.assign(existing, rec); else arr.push(rec);
+    await setDoc(doc(db, SYNC_COLLECTION, ASSIGN_DOC), { data: JSON.stringify({ assignments: arr, updatedAt: Date.now() }), updatedAt: Date.now() });
+    ASSIGN_DEFS = arr;
+    editingId = null;
+    form.style.display = "none"; form.innerHTML = "";
+    renderAssignManage();
+    renderAssignResults();
+    alert("課題を公開しました。生徒アプリのホームに表示されます。");
+  } catch (e) {
+    $("assign-msg").innerHTML = `<span class="err">保存に失敗しました：${esc(e.code || e.message)}</span>`;
+  }
+}
+
+async function deleteAssignment(id) {
+  const a = ASSIGN_DEFS.find(x => x.id === id);
+  if (!a) return;
+  if (!confirm(`課題「${a.title || ""}」を削除します。よろしいですか？\n（生徒の既存の成績記録は消えません）`)) return;
+  try {
+    let arr = [];
+    const snap = await getDoc(doc(db, SYNC_COLLECTION, ASSIGN_DOC));
+    if (snap.exists()) { try { arr = JSON.parse(snap.data().data).assignments || []; } catch (e) { arr = []; } }
+    arr = arr.filter(x => x.id !== id);
+    await setDoc(doc(db, SYNC_COLLECTION, ASSIGN_DOC), { data: JSON.stringify({ assignments: arr, updatedAt: Date.now() }), updatedAt: Date.now() });
+    ASSIGN_DEFS = arr;
+    renderAssignManage();
+    renderAssignResults();
+  } catch (e) {
+    alert("削除に失敗しました：" + (e.code || e.message));
+  }
+}
+
+/* 課題の結果（対象生徒 × 合計点・問別⭕❌） */
+function renderAssignResults() {
+  const box = $("assign-results");
+  if (!box) return;
+  if (!ASSIGN_DEFS.length) { box.innerHTML = `<p class="muted">課題を作成すると、ここに対象生徒の結果（合計点・問別の⭕❌）が表示されます。</p>`; return; }
+  box.innerHTML = ASSIGN_DEFS.map(a => {
+    const targeted = ROWS.filter(r => matchTarget(r, a.target));
+    const qids = a.qids || [];
+    const head = `<tr>
+      <th class="name-col">大学 / 学籍番号</th>
+      <th>合計</th>
+      ${qids.map(q => `<th title="${esc(qidLabel(q))}">${esc(qidLabel(q))}</th>`).join("")}
+      <th>挑戦</th><th>直近</th>
+    </tr>`;
+    const body = targeted.length ? targeted.map(r => {
+      const ab = r.assignBest && r.assignBest[a.id];
+      if (!ab || ab.score < 0) {
+        return `<tr><td class="name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
+          <td class="s-none">未提出</td>${qids.map(() => `<td class="s-none">–</td>`).join("")}<td class="s-none">–</td><td class="s-none">–</td></tr>`;
+      }
+      const dmap = {};
+      (ab.detail || []).forEach(d => { dmap[d.qid] = d.correct; });
+      const cells = qids.map(q => q in dmap
+        ? `<td>${dmap[q] ? '<span class="mk-o">⭕</span>' : '<span class="mk-x">❌</span>'}</td>`
+        : `<td class="s-none">–</td>`).join("");
+      return `<tr>
+        <td class="name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
+        <td class="score-cell ${scoreClass(ab.score, ab.max)}">${ab.score}<span class="muted" style="font-weight:400">/${ab.max}</span></td>
+        ${cells}
+        <td class="muted">${ab.attempts}回</td>
+        <td class="muted">${esc(ab.last || "")}</td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="99" class="muted" style="padding:12px">対象の学生がいません（対象：${esc(targetLabel(a.target))}）。</td></tr>`;
+    const done = targeted.filter(r => r.assignBest && r.assignBest[a.id] && r.assignBest[a.id].score >= 0).length;
+    return `
+      <div style="margin-bottom:6px"><b>${esc(a.title || "課題")}</b>
+        <span class="muted">｜対象：${esc(targetLabel(a.target))}｜提出 ${done}/${targeted.length}名</span></div>
+      <table style="margin-bottom:18px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }).join("");
+}
+
 /* ===== CSV ===== */
 function toCSV() {
   const head = ["大学", "学籍番号", ...GROUPS.map(shortLabel), "合計(最高)", "最終更新"];
@@ -395,6 +677,7 @@ $("csv-btn").onclick = () => {
 $("reload-btn").onclick = loadData;
 $("univ-filter").onchange = render;
 $("search-box").oninput = render;
+$("assign-new-btn").onclick = () => openAssignForm(null);
 </script>
 </body>
 </html>
