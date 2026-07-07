@@ -74,7 +74,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.2</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.3</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -396,19 +396,19 @@ function toggleDetail(tr, r) {
   row.querySelector(".row-del-btn").onclick = () => deleteRow(r);
 }
 
-/* 記録の削除（学籍番号の一致確認つき）。クラウドの1件のみ削除。学生の端末データは消えない */
+/* 記録の削除（2段階の確認）。クラウドの1件のみ削除。学生の端末データは消えない。
+   ※以前は prompt() で学籍番号の手入力を求めていたが、スマホの一部ブラウザで
+     入力欄が表示されず削除できないため、入力不要の2回確認方式に変更（v1.3） */
 async function deleteRow(r) {
-  const input = prompt(
+  const ok1 = confirm(
     "この学生の記録を【クラウドから】削除します。\n\n"
     + `大学：${r.univ}\n学籍番号：${r.sid}\n同期コード：${r.code}\n\n`
     + "※学生の端末内のデータは消えません。もしその学生が再びアプリを使うと、端末から再同期されて復活する場合があります。\n\n"
-    + `削除するには、確認のため学籍番号「${r.sid}」を入力してください。`
+    + "削除する場合は「OK」を押してください。"
   );
-  if (input === null) return;
-  if (input.trim() !== String(r.sid)) {
-    alert("学籍番号が一致しませんでした。削除を中止しました。");
-    return;
-  }
+  if (!ok1) return;
+  const ok2 = confirm(`本当に削除しますか？（元に戻せません）\n\n大学：${r.univ}\n学籍番号：${r.sid}`);
+  if (!ok2) return;
   try {
     await deleteDoc(doc(db, SYNC_COLLECTION, r.code));
     const idx = ROWS.indexOf(r);
