@@ -129,7 +129,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.15配布版</span></h1>
+    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.16配布版</span></h1>
     <p>仕訳問題対策</p>
   </header>
   <div id="err-banner" style="display:none; background:#fdeeee; color:#d94f4f; border:1px solid #f2c9c9; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:.82rem; word-break:break-all"></div>
@@ -286,6 +286,26 @@ const UNIVERSITIES=[
   "駒澤大学",
   "専修大学"
 ]; /* ←必要に応じて追加・変更可能 */
+const UNIVERSITY_LINKS=[
+  {code:"gakushuin", name:"学習院大学"},
+  {code:"nichidai-econ", name:"日本大学経済学部"},
+  {code:"nichidai-commerce", name:"日本大学商学部"},
+  {code:"toyo", name:"東洋大学"},
+  {code:"komazawa", name:"駒澤大学"},
+  {code:"senshu", name:"専修大学"}
+]; /* 大学別QRコード用。URLに ?univ=gakushuin のように付けると大学名を固定する */
+function fixedUniversity(){
+  try{
+    const params=new URLSearchParams(location.search);
+    const code=(params.get("univ")||params.get("university")||params.get("campus")||"").trim().toLowerCase();
+    const hit=UNIVERSITY_LINKS.find(u=>u.code===code);
+    return hit ? hit.name : "";
+  }catch(e){ return ""; }
+}
+function fixedUniversityNotice(){
+  const u=fixedUniversity();
+  return u ? `<div style="border:1px solid #cfe0f5; background:#f3f8ff; color:var(--primary-dark); border-radius:10px; padding:9px 10px; font-size:.86rem; margin-bottom:8px">所属大学：<b>${esc(u)}</b><br><span style="font-size:.76rem; color:var(--sub)">この大学専用リンクから開いているため、大学名は固定されています。</span></div>` : "";
+}
 function univOptionsHTML(){
   return `<option value="">大学を選択</option>`
     +UNIVERSITIES.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join("")
@@ -297,10 +317,17 @@ function setProfileInputs(p){
   sel.innerHTML=univOptionsHTML();
   const other=document.getElementById("univ-other");
   const sid=document.getElementById("sid-input");
+  const fixed=fixedUniversity();
   if(other){ other.style.display="none"; other.value=""; }
   if(sid) sid.value="";
+  if(fixed){
+    sel.innerHTML=`<option value="${esc(fixed)}">${esc(fixed)}</option>`;
+    sel.value=fixed;
+    if(other) other.style.display="none";
+  }
   if(p){
-    if(UNIVERSITIES.includes(p.univ)) sel.value=p.univ;
+    if(fixed) sel.value=fixed;
+    else if(UNIVERSITIES.includes(p.univ)) sel.value=p.univ;
     else if(p.univ && other){ sel.value="__other__"; other.style.display=""; other.value=p.univ; }
     if(sid) sid.value=p.sid||"";
   }
@@ -323,7 +350,8 @@ function renderProfileArea(){
       <div style="font-size:.85rem; color:var(--sub); margin-bottom:4px">現在の登録情報</div>
       <div style="font-weight:700; margin-bottom:8px">${esc(p.univ)}｜${esc(p.sid)}</div>
       <button class="small-act" onclick="startProfileEdit()">ユーザー情報を修正する</button>
-      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">修正しても同期コードは変わりません。管理者画面には次回同期後、新しい大学名・学籍番号で表示されます。</small>`;
+      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">修正しても同期コードは変わりません。管理者画面には次回同期後、新しい大学名・学籍番号で表示されます。</small>
+      ${fixedUniversity() && p.univ!==fixedUniversity() ? `<small style="display:block; color:var(--ng); font-size:.72rem; margin-top:6px">このリンクは「${esc(fixedUniversity())}」専用です。大学名を直す場合は「ユーザー情報を修正する」から保存してください。</small>` : ""}`;
     form.style.display="none";
     if(cancel) cancel.style.display="none";
     if(status) status.textContent="";
@@ -331,7 +359,7 @@ function renderProfileArea(){
     current.style.display="none";
     form.style.display="flex";
     if(cancel) cancel.style.display=(p && p.univ && p.sid) ? "" : "none";
-    if(status) status.textContent=p ? "修正後も同じ同期コードで保存されます。" : "大学名と学籍番号を設定すると、成績レポートに記載されます。";
+    if(status) status.textContent=fixedUniversity() ? "大学名はこのリンクの大学で固定されます。学籍番号を確認して保存してください。" : (p ? "修正後も同じ同期コードで保存されます。" : "大学名と学籍番号を設定すると、成績レポートに記載されます。");
   }
 }
 function startProfileEdit(){
@@ -363,14 +391,15 @@ function toggleDataSettings(btn){
 /* 初回起動時：未登録なら大学・学籍番号の入力を必須で促す */
 function requireProfile(){
   if(store.profile && store.profile.univ && store.profile.sid) return;
+  const fixed=fixedUniversity();
   const bg=document.createElement("div");
   bg.className="modal-bg";
   bg.innerHTML=`<div class="modal">
        <h3 style="margin-top:0">はじめに登録してください</h3>
-       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、あなたの<b>大学</b>と<b>学籍番号</b>を登録してください。（あとで「設定 → データ保存・引き継ぎ」から修正できます）</div>
+       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、${fixed ? "あなたの<b>学籍番号</b>" : "あなたの<b>大学</b>と<b>学籍番号</b>"}を登録してください。（あとで「設定 → データ保存・引き継ぎ」から修正できます）</div>
+       ${fixedUniversityNotice()}
        <div style="display:flex; flex-direction:column; gap:8px">
-         <select id="req-univ" onchange="document.getElementById('req-other').style.display=this.value==='__other__'?'':'none'">${univOptionsHTML()}</select>
-         <input type="text" id="req-other" placeholder="大学名を入力" style="display:none">
+         ${fixed ? `<input type="hidden" id="req-univ" value="${esc(fixed)}"><input type="hidden" id="req-other" value="">` : `<select id="req-univ" onchange="document.getElementById('req-other').style.display=this.value==='__other__'?'':'none'">${univOptionsHTML()}</select><input type="text" id="req-other" placeholder="大学名を入力" style="display:none">`}
          <input type="text" id="req-sid" placeholder="学籍番号">
          <button class="main" id="req-save" style="width:100%; margin-top:4px">登録する</button>
        </div>
@@ -403,6 +432,8 @@ function requireProfile(){
   };
 }
 function commitProfile(univ,sid){
+  const fixed=fixedUniversity();
+  if(fixed) univ=fixed;
   if(!univ||!sid){ alert("大学名と学籍番号を入力してください。"); return false; }
   store.profile={univ,sid}; saveStore(store); showProfileStatus();
   ensureSyncCode();      /* 登録したら自動で同期コードを発行しクラウドへ（管理者ダッシュボードに自動で出る） */
@@ -424,7 +455,8 @@ function ensureSyncCode(){
 }
 function saveProfile(){
   const sel=document.getElementById("univ-select");
-  const univ=sel.value==="__other__"? document.getElementById("univ-other").value.trim() : sel.value;
+  const fixed=fixedUniversity();
+  const univ=fixed || (sel.value==="__other__"? document.getElementById("univ-other").value.trim() : sel.value);
   const sid=document.getElementById("sid-input").value.trim();
   if(!commitProfile(univ,sid)) return;
   alert("✅ 保存しました");
@@ -478,7 +510,7 @@ async function cloudLoad(code){
 }
 
 /* ===== 管理者からの課題（自動配信） =====
-   管理者ダッシュボードが boki2_sync/__assignments__ に書いた課題定義を読むだけ（生徒は書き込まない）。 */
+   管理者ダッシュボードが boki2_sync/assignments-config に書いた課題定義を読むだけ（生徒は書き込まない）。 */
 let ASSIGNMENTS=[];
 async function loadAssignments(){
   if(!syncReady()) return;
