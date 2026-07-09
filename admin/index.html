@@ -54,6 +54,9 @@
   .detail-grid{display:flex; flex-wrap:wrap; gap:8px;}
   .detail-chip{border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:.8rem; background:#fff;}
   .err{color:var(--ng); font-weight:600;}
+  .univ-head{background:#f7fafd; cursor:pointer;}
+  .univ-head td{padding:10px 12px; text-align:left; font-weight:700; color:var(--primary-dark);}
+  .univ-head .muted{font-weight:400; margin-left:8px;}
   /* 課題（アサインメント） */
   .sec-title{font-size:1rem; font-weight:700; color:var(--primary-dark); margin:0 0 10px;}
   .assign-picker{border:1px solid var(--line); border-radius:10px; padding:10px; margin:10px 0; max-height:320px; overflow:auto; background:#fafcfe;}
@@ -64,6 +67,19 @@
   .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
   .assign-row-form input, .assign-row-form select, .assign-row-form textarea{width:100%; max-width:420px; font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
   .assign-list-item{border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fff; font-size:.84rem;}
+  .assign-result-panel{border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:12px; background:#fafcfe;}
+  .assign-result-head{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+  .mini-stat-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin:10px 0;}
+  .mini-stat{background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px;}
+  .mini-stat .num{font-size:1.25rem; font-weight:800; color:var(--primary);}
+  .mini-stat .lbl{font-size:.74rem; color:var(--sub);}
+  .q-rate-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0;}
+  .q-rate{background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px; font-size:.8rem;}
+  .q-rate .bar{height:8px; background:#e5eaf0; border-radius:999px; overflow:hidden; margin-top:5px;}
+  .q-rate .bar i{display:block; height:100%; background:var(--ok);}
+  .student-result-row{cursor:pointer;}
+  .student-result-row:hover{background:#f7fafd;}
+  .student-detail-row td{background:#fff; text-align:left; white-space:normal;}
   .mk-o{color:var(--ok); font-weight:700;}
   .mk-x{color:var(--ng); font-weight:700;}
   .foot{color:var(--sub); font-size:.78rem; text-align:center; margin-top:18px;}
@@ -74,7 +90,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.4</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.5</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -118,12 +134,7 @@
       <button id="assign-new-btn" class="primary">＋ 新しい課題を作る</button>
       <div id="assign-form" style="display:none"></div>
       <div id="assign-list" style="margin-top:12px"></div>
-    </div>
-
-    <!-- 課題の結果 -->
-    <div class="card">
-      <div class="sec-title">📌 課題の結果</div>
-      <div id="assign-results" class="tbl-scroll"></div>
+      <div id="assign-results" style="display:none"></div>
     </div>
   </div>
 
@@ -162,6 +173,8 @@ let ROWS = [];      // 整形済みの学生データ
 let GROUPS = [];     // 列に使う回別テスト名（① 〜 の順）
 let sortKey = "univ";
 let sortAsc = true;
+let OPEN_UNIVS = new Set();
+let openAssignResultId = null;
 
 /* ===== 課題（管理者が配信する5問セット） ===== */
 const ASSIGN_DOC = "assignments-config";   // boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない）
@@ -231,10 +244,10 @@ async function loadData() {
       tests.forEach(t => {
         if (!t) return;
         if (t.assignmentId) {   // 課題の結果：メイン表とは別に集約
-          const a = assignBest[t.assignmentId] || { score: -1, max: t.max || 0, attempts: 0, last: null, detail: null };
+          const a = assignBest[t.assignmentId] || { score: -1, max: t.max || 0, attempts: 0, last: null, detail: null, timeMs: null };
           a.attempts++;
           a.last = t.date || a.last;
-          if ((t.score ?? 0) > a.score) { a.score = t.score; a.max = t.max || a.max; a.detail = t.detail || null; }
+          if ((t.score ?? 0) > a.score) { a.score = t.score; a.max = t.max || a.max; a.detail = t.detail || null; a.timeMs = t.timeMs ?? null; }
           assignBest[t.assignmentId] = a;
           return;
         }
@@ -350,25 +363,52 @@ function render() {
     $("tbody").innerHTML = `<tr><td colspan="99" class="muted" style="padding:16px">該当する学生がいません。</td></tr>`;
     return;
   }
-  $("tbody").innerHTML = rows.map((r, i) => {
+  const grouped = {};
+  rows.forEach(r => { (grouped[r.univ] ||= []).push(r); });
+  const forceOpen = !!uf || !!sq;
+  $("tbody").innerHTML = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ja")).map(univ => {
+    const groupRows = grouped[univ];
+    const open = forceOpen || OPEN_UNIVS.has(univ);
+    const groupTotal = groupRows.reduce((s, r) => s + totalBest(r), 0);
+    const groupAvg = groupRows.length ? Math.round(groupTotal / groupRows.length) : 0;
+    const groupActive = groupRows.filter(r => r.attemptsTotal > 0).length;
+    const head = `<tr class="univ-head" data-univ="${esc(univ)}">
+      <td colspan="99">${open ? "▼" : "▶"} ${esc(univ)}
+        <span class="muted">${groupRows.length}名｜受験実績 ${groupActive}名｜平均合計 ${groupAvg}点</span>
+      </td>
+    </tr>`;
+    const body = open ? groupRows.map(r => {
     const cells = GROUPS.map(g => {
       const b = r.best[g];
       if (!b || b.score < 0) return `<td class="score-cell s-none">–</td>`;
       return `<td class="score-cell ${scoreClass(b.score, b.max)}" title="挑戦${b.attempts}回・直近${esc(b.last || "")}">${b.score}<span class="muted" style="font-weight:400">/${b.max}</span></td>`;
     }).join("");
     const upd = r.updatedAt ? new Date(r.updatedAt).toLocaleDateString("ja-JP", { month:"numeric", day:"numeric" }) : "–";
-    return `<tr data-i="${i}">
+    return `<tr data-code="${esc(r.code)}">
       <td class="univ name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
       ${cells}
       <td><span class="badge-total">${totalBest(r)}</span></td>
       <td class="muted">${upd}</td>
     </tr>`;
+    }).join("") : "";
+    return head + body;
   }).join("");
 
-  // 行クリックで詳細トグル
-  $("tbody").querySelectorAll("tr[data-i]").forEach(tr => {
+  $("tbody").querySelectorAll("tr[data-univ]").forEach(tr => {
+    tr.onclick = () => {
+      const univ = tr.dataset.univ;
+      if (OPEN_UNIVS.has(univ)) OPEN_UNIVS.delete(univ); else OPEN_UNIVS.add(univ);
+      render();
+    };
+  });
+
+  // 学生行クリックで詳細トグル
+  $("tbody").querySelectorAll("tr[data-code]").forEach(tr => {
     tr.style.cursor = "pointer";
-    tr.onclick = () => toggleDetail(tr, rows[tr.dataset.i]);
+    tr.onclick = () => {
+      const r = ROWS.find(x => x.code === tr.dataset.code);
+      if (r) toggleDetail(tr, r);
+    };
   });
 }
 
@@ -483,9 +523,11 @@ function renderAssignManage() {
     <div class="assign-list-item">
       <b>${esc(a.title || "課題")}</b>　<span class="muted">${esc(targetLabel(a.target))}｜${(a.qids || []).length}問</span>
       <div class="muted" style="margin:4px 0">${(a.qids || []).map(q => esc(qidLabel(q))).join("／")}</div>
+      <button data-result="${esc(a.id)}">📊 成績結果</button>
       <button data-edit="${esc(a.id)}">✏ 編集</button>
       <button data-del="${esc(a.id)}" style="color:#b91c1c; border-color:#fca5a5; background:#fee2e2">🗑 削除</button>
     </div>`).join("");
+  box.querySelectorAll("[data-result]").forEach(b => b.onclick = () => toggleAssignResult(b.dataset.result));
   box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openAssignForm(b.dataset.edit));
   box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => deleteAssignment(b.dataset.del));
 }
@@ -588,7 +630,7 @@ async function saveAssignment() {
     editingId = null;
     form.style.display = "none"; form.innerHTML = "";
     renderAssignManage();
-    renderAssignResults();
+    if (openAssignResultId === id) renderAssignResults();
     alert("課題を公開しました。生徒アプリのホームに表示されます。");
   } catch (e) {
     $("assign-msg").innerHTML = `<span class="err">保存に失敗しました：${esc(e.code || e.message)}</span>`;
@@ -606,6 +648,7 @@ async function deleteAssignment(id) {
     arr = arr.filter(x => x.id !== id);
     await setDoc(doc(db, SYNC_COLLECTION, ASSIGN_DOC), { data: JSON.stringify({ assignments: arr, updatedAt: Date.now() }), updatedAt: Date.now() });
     ASSIGN_DEFS = arr;
+    if (openAssignResultId === id) openAssignResultId = null;
     renderAssignManage();
     renderAssignResults();
   } catch (e) {
@@ -613,45 +656,107 @@ async function deleteAssignment(id) {
   }
 }
 
-/* 課題の結果（対象生徒 × 合計点・問別⭕❌） */
+function fmtDur(ms) {
+  if (ms == null || !isFinite(ms)) return "–";
+  const sec = Math.round(ms / 1000);
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+function toggleAssignResult(id) {
+  openAssignResultId = openAssignResultId === id ? null : id;
+  renderAssignResults();
+}
+
+/* 課題の結果（全体サマリー → 学生別クリック詳細） */
 function renderAssignResults() {
   const box = $("assign-results");
   if (!box) return;
-  if (!ASSIGN_DEFS.length) { box.innerHTML = `<p class="muted">課題を作成すると、ここに対象生徒の結果（合計点・問別の⭕❌）が表示されます。</p>`; return; }
-  box.innerHTML = ASSIGN_DEFS.map(a => {
-    const targeted = ROWS.filter(r => matchTarget(r, a.target));
-    const qids = a.qids || [];
-    const head = `<tr>
-      <th class="name-col">大学 / 学籍番号</th>
-      <th>合計</th>
-      ${qids.map(q => `<th title="${esc(qidLabel(q))}">${esc(qidLabel(q))}</th>`).join("")}
-      <th>挑戦</th><th>直近</th>
-    </tr>`;
-    const body = targeted.length ? targeted.map(r => {
-      const ab = r.assignBest && r.assignBest[a.id];
-      if (!ab || ab.score < 0) {
-        return `<tr><td class="name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
-          <td class="s-none">未提出</td>${qids.map(() => `<td class="s-none">–</td>`).join("")}<td class="s-none">–</td><td class="s-none">–</td></tr>`;
-      }
-      const dmap = {};
-      (ab.detail || []).forEach(d => { dmap[d.qid] = d.correct; });
-      const cells = qids.map(q => q in dmap
-        ? `<td>${dmap[q] ? '<span class="mk-o">⭕</span>' : '<span class="mk-x">❌</span>'}</td>`
-        : `<td class="s-none">–</td>`).join("");
-      return `<tr>
-        <td class="name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
-        <td class="score-cell ${scoreClass(ab.score, ab.max)}">${ab.score}<span class="muted" style="font-weight:400">/${ab.max}</span></td>
-        ${cells}
-        <td class="muted">${ab.attempts}回</td>
-        <td class="muted">${esc(ab.last || "")}</td>
-      </tr>`;
-    }).join("") : `<tr><td colspan="99" class="muted" style="padding:12px">対象の学生がいません（対象：${esc(targetLabel(a.target))}）。</td></tr>`;
-    const done = targeted.filter(r => r.assignBest && r.assignBest[a.id] && r.assignBest[a.id].score >= 0).length;
-    return `
-      <div style="margin-bottom:6px"><b>${esc(a.title || "課題")}</b>
-        <span class="muted">｜対象：${esc(targetLabel(a.target))}｜提出 ${done}/${targeted.length}名</span></div>
-      <table style="margin-bottom:18px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  if (!openAssignResultId) { box.style.display = "none"; box.innerHTML = ""; return; }
+  const a = ASSIGN_DEFS.find(x => x.id === openAssignResultId);
+  if (!a) { box.style.display = "none"; box.innerHTML = ""; return; }
+  const targeted = ROWS.filter(r => matchTarget(r, a.target));
+  const submitted = targeted.filter(r => r.assignBest && r.assignBest[a.id] && r.assignBest[a.id].score >= 0);
+  const qids = a.qids || [];
+  const max = submitted.find(r => r.assignBest[a.id].max)?.assignBest[a.id].max || qids.reduce((s, q) => s + (META.find(m => m.qid === q)?.points || 0), 0);
+  const avgScore = submitted.length ? submitted.reduce((s, r) => s + r.assignBest[a.id].score, 0) / submitted.length : 0;
+  const timed = submitted.map(r => r.assignBest[a.id].timeMs).filter(v => v != null);
+  const avgTime = timed.length ? timed.reduce((s, v) => s + v, 0) / timed.length : null;
+  const submitRate = targeted.length ? Math.round(submitted.length / targeted.length * 100) : 0;
+  const qRates = qids.map(qid => {
+    let answered = 0, ok = 0;
+    submitted.forEach(r => {
+      const d = (r.assignBest[a.id].detail || []).find(x => x.qid === qid);
+      if (!d) return;
+      answered++;
+      if (d.correct) ok++;
+    });
+    const rate = answered ? Math.round(ok / answered * 100) : 0;
+    return `<div class="q-rate">
+      <b>${esc(qidLabel(qid))}</b>
+      <div class="muted">${ok}/${answered}名 正解（${rate}%）</div>
+      <div class="bar"><i style="width:${rate}%"></i></div>
+    </div>`;
   }).join("");
+  const rows = targeted.length ? targeted.map(r => {
+    const ab = r.assignBest && r.assignBest[a.id];
+    if (!ab || ab.score < 0) {
+      return `<tr class="student-result-row" data-assign-student="${esc(r.code)}"><td class="name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td><td class="s-none">未提出</td><td class="s-none">–</td><td class="s-none">–</td></tr>`;
+    }
+    const pct = ab.max ? Math.round(ab.score / ab.max * 100) : 0;
+    return `<tr class="student-result-row" data-assign-student="${esc(r.code)}">
+      <td class="name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
+      <td class="score-cell ${scoreClass(ab.score, ab.max)}">${ab.score}<span class="muted" style="font-weight:400">/${ab.max}</span> <span class="muted">(${pct}%)</span></td>
+      <td class="muted">${fmtDur(ab.timeMs)}</td>
+      <td class="muted">${ab.attempts}回｜${esc(ab.last || "")}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="99" class="muted" style="padding:12px">対象の学生がいません。</td></tr>`;
+  box.style.display = "";
+  box.innerHTML = `<div class="assign-result-panel">
+    <div class="assign-result-head">
+      <div><b>📊 ${esc(a.title || "課題")} の成績結果</b><br><span class="muted">対象：${esc(targetLabel(a.target))}</span></div>
+      <button onclick="window.__closeAssignResult()">閉じる</button>
+    </div>
+    <div class="mini-stat-row">
+      <div class="mini-stat"><div class="num">${submitted.length}/${targeted.length}名</div><div class="lbl">提出人数</div></div>
+      <div class="mini-stat"><div class="num">${submitRate}%</div><div class="lbl">提出率</div></div>
+      <div class="mini-stat"><div class="num">${submitted.length ? avgScore.toFixed(1) : "–"}${max ? `/${max}` : ""}</div><div class="lbl">平均点</div></div>
+      <div class="mini-stat"><div class="num">${fmtDur(avgTime)}</div><div class="lbl">平均所要時間</div></div>
+    </div>
+    <div class="sec-title" style="margin-top:12px">問題別の正答率</div>
+    <div class="q-rate-grid">${qRates || '<span class="muted">問題が選択されていません。</span>'}</div>
+    <div class="sec-title" style="margin-top:12px">学生別の結果</div>
+    <div class="tbl-scroll"><table><thead><tr><th class="name-col">大学 / 学籍番号</th><th>得点</th><th>所要時間</th><th>挑戦</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+  box.querySelectorAll("[data-assign-student]").forEach(tr => {
+    tr.onclick = () => toggleAssignStudentDetail(tr, targeted.find(r => r.code === tr.dataset.assignStudent), a);
+  });
+}
+
+window.__closeAssignResult = function() {
+  openAssignResultId = null;
+  renderAssignResults();
+};
+function toggleAssignStudentDetail(tr, r, a) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains("student-detail-row")) { next.remove(); return; }
+  if (!r) return;
+  const ab = r.assignBest && r.assignBest[a.id];
+  const qids = a.qids || [];
+  const dmap = {};
+  if (ab && ab.detail) ab.detail.forEach(d => { dmap[d.qid] = d; });
+  const detail = qids.map(qid => {
+    const d = dmap[qid];
+    if (!d) return `<span class="detail-chip s-none">${esc(qidLabel(qid))}：未解答</span>`;
+    return `<span class="detail-chip">${esc(qidLabel(qid))}：${d.correct ? '<span class="mk-o">⭕ 正解</span>' : '<span class="mk-x">❌ 不正解</span>'}</span>`;
+  }).join("");
+  const row = document.createElement("tr");
+  row.className = "student-detail-row";
+  row.innerHTML = `<td colspan="99">
+    <b>${esc(r.univ)}｜${esc(r.sid)}</b>
+    <span class="muted">（同期コード：${esc(r.code)}）</span>
+    <div class="detail-grid" style="margin-top:8px">${detail || '<span class="muted">詳細がありません。</span>'}</div>
+  </td>`;
+  tr.after(row);
 }
 
 /* ===== CSV ===== */
