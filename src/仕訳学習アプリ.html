@@ -493,11 +493,13 @@ function genCode(){
 }
 let syncTimer=null, syncStatus="";
 function scheduleCloudSave(){
+  if(isAdminPreview()) return;
   if(!syncReady() || !store.sync?.code) return;
   clearTimeout(syncTimer);
   syncTimer=setTimeout(cloudSave, 4000);
 }
 async function cloudSave(){
+  if(isAdminPreview()) return;
   if(!syncReady() || !store.sync?.code) return;
   try{
     setSyncStatus("同期中…");
