@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>管理者招待の確認｜簿記2級 仕訳トレーニング</title>
 <style>
-  :root{--primary:#1a5fb4; --primary-dark:#14497f; --bg:#f4f6f9; --card:#fff; --text:#22303d; --sub:#6b7a89; --line:#dbe2ea;}
+  :root{--primary:#1a5fb4; --primary-dark:#14497f; --bg:#f4f6f9; --card:#fff; --text:#22303d; --sub:#6b7a89; --line:#dbe2ea; --err:#b91c1c; --ok:#166534;}
   *{box-sizing:border-box;}
   body{font-family:"Hiragino Sans","Yu Gothic",Meiryo,sans-serif; background:var(--bg); color:var(--text); line-height:1.7; margin:0; padding:18px;}
   .wrap{max-width:680px; margin:0 auto;}
@@ -17,8 +17,13 @@
   .label{font-size:.82rem; color:var(--sub); margin-top:10px;}
   .value{font-size:1.05rem; font-weight:700; color:var(--primary-dark);}
   .muted{color:var(--sub); font-size:.9rem;}
-  a.button{display:inline-block; text-decoration:none; background:var(--primary); color:#fff; border-radius:8px; padding:10px 16px; font-weight:700; margin-top:12px;}
-  a.button:hover{background:var(--primary-dark);}
+  .err{color:var(--err); font-weight:700;}
+  .ok{color:var(--ok); font-weight:700;}
+  label{display:block; font-size:.85rem; font-weight:700; margin:14px 0 4px;}
+  input{width:100%; font-family:inherit; font-size:16px; padding:10px; border:1px solid var(--line); border-radius:8px;}
+  button,a.button{display:inline-block; border:0; text-decoration:none; background:var(--primary); color:#fff; border-radius:8px; padding:10px 16px; font-weight:700; margin-top:12px; cursor:pointer; font-family:inherit; font-size:.95rem;}
+  button:hover,a.button:hover{background:var(--primary-dark);}
+  button:disabled{opacity:.55; cursor:default;}
 </style>
 </head>
 <body>
@@ -28,24 +33,116 @@
     <p>簿記2級 仕訳トレーニング｜管理者ダッシュボード</p>
   </header>
   <div class="card">
-    <p>パスワード設定が完了したら、以下の内容で管理者ダッシュボードにログインしてください。</p>
+    <p>担当大学が正しいことを確認してから、パスワードを設定してください。</p>
     <div class="label">メールアドレス</div>
     <div class="value" id="email-view">確認中...</div>
     <div class="label">権限</div>
     <div class="value" id="role-view">確認中...</div>
     <div class="label">担当大学</div>
     <div class="value" id="univ-view">確認中...</div>
-    <p class="muted" style="margin-top:16px">担当大学が違う場合は、ログインせずにマスター管理者へ連絡してください。</p>
-    <a class="button" href="./">管理者ダッシュボードを開く</a>
+    <p class="muted" style="margin-top:16px">担当大学が違う場合は、パスワードを設定せずにマスター管理者へ連絡してください。</p>
+    <div id="reset-area" style="display:none">
+      <label for="password-input">新しいパスワード</label>
+      <input id="password-input" type="password" autocomplete="new-password" placeholder="6文字以上">
+      <label for="password-confirm-input">新しいパスワード（確認）</label>
+      <input id="password-confirm-input" type="password" autocomplete="new-password" placeholder="もう一度入力">
+      <button id="set-password-btn">確認してパスワードを設定</button>
+    </div>
+    <p id="msg" class="muted" style="margin-top:14px"></p>
+    <a id="dashboard-link" class="button" href="./" style="display:none">管理者ダッシュボードを開く</a>
   </div>
 </div>
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, verifyPasswordResetCode, confirmPasswordReset, applyActionCode } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC29p0TS5K8FFs4s0ICxRrcOSLdXOnwIII",
+  authDomain: "boki-shiwake-app.firebaseapp.com",
+  projectId: "boki-shiwake-app"
+};
+const app = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
 const params = new URLSearchParams(location.search);
+const mode = params.get("mode") || "";
+const code = params.get("oobCode") || "";
+const continueParams = paramsFromContinueUrl(params.get("continueUrl"));
+const getParam = name => params.get(name) || continueParams.get(name) || "";
 const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
-const role = params.get("role") === "master" ? "マスター管理者" : "大学別管理者";
-document.getElementById("email-view").innerHTML = esc(params.get("email") || "未指定");
-document.getElementById("role-view").innerHTML = esc(role);
-document.getElementById("univ-view").innerHTML = esc(params.get("univ") || "未指定");
+const $ = id => document.getElementById(id);
+
+function paramsFromContinueUrl(url) {
+  try { return new URL(url || "").searchParams; } catch (e) { return new URLSearchParams(); }
+}
+function setText(id, value) {
+  $(id).innerHTML = esc(value || "未指定");
+}
+function roleLabel(role) {
+  return role === "master" ? "マスター管理者" : "大学別管理者";
+}
+function showMsg(text, cls="muted") {
+  $("msg").className = cls;
+  $("msg").textContent = text;
+}
+function authErrorMessage(e) {
+  const code = e.code || "";
+  if (code === "auth/expired-action-code") return "リンクの有効期限が切れています。マスター管理者に案内メールの再送を依頼してください。";
+  if (code === "auth/invalid-action-code") return "リンクが無効です。最新の案内メールから開いてください。";
+  if (code === "auth/weak-password") return "パスワードが短すぎます。6文字以上で設定してください。";
+  return e.message || code || "処理に失敗しました。";
+}
+
+async function init() {
+  const role = getParam("role") || "univ";
+  const univ = getParam("univ") || "";
+  setText("role-view", roleLabel(role));
+  setText("univ-view", role === "master" ? "全大学" : univ);
+  if (mode === "resetPassword" && code) {
+    try {
+      const email = await verifyPasswordResetCode(auth, code);
+      setText("email-view", email);
+      $("reset-area").style.display = "";
+      showMsg("担当大学が正しければ、新しいパスワードを入力してください。");
+    } catch (e) {
+      setText("email-view", getParam("email") || "");
+      showMsg(authErrorMessage(e), "err");
+    }
+    return;
+  }
+  if (mode === "verifyEmail" && code) {
+    try {
+      await applyActionCode(auth, code);
+      setText("email-view", getParam("email") || "");
+      showMsg("メール確認が完了しました。管理者ダッシュボードへログインしてください。", "ok");
+      $("dashboard-link").style.display = "inline-block";
+    } catch (e) {
+      showMsg(authErrorMessage(e), "err");
+    }
+    return;
+  }
+  setText("email-view", getParam("email") || "");
+  showMsg("メール内の最新リンクから開いてください。", "err");
+}
+
+$("set-password-btn").onclick = async () => {
+  const p1 = $("password-input").value;
+  const p2 = $("password-confirm-input").value;
+  if (p1.length < 6) { showMsg("パスワードは6文字以上で入力してください。", "err"); return; }
+  if (p1 !== p2) { showMsg("確認用パスワードが一致しません。", "err"); return; }
+  $("set-password-btn").disabled = true;
+  showMsg("パスワードを設定しています...");
+  try {
+    await confirmPasswordReset(auth, code, p1);
+    $("reset-area").style.display = "none";
+    $("dashboard-link").style.display = "inline-block";
+    showMsg("パスワードを設定しました。管理者ダッシュボードへログインしてください。", "ok");
+  } catch (e) {
+    $("set-password-btn").disabled = false;
+    showMsg(authErrorMessage(e), "err");
+  }
+};
+
+init();
 </script>
 </body>
 </html>
