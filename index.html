@@ -129,7 +129,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.12配布版</span></h1>
+    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.13配布版</span></h1>
     <p>仕訳問題対策</p>
   </header>
   <div id="err-banner" style="display:none; background:#fdeeee; color:#d94f4f; border:1px solid #f2c9c9; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:.82rem; word-break:break-all"></div>
@@ -164,16 +164,15 @@
       <small id="retry-info" style="display:block; color:var(--sub); font-size:.75rem; margin-top:8px"></small>
     </div>
     <div class="card">
-      <button class="ghost" style="width:100%; font-size:.9rem" id="guide-toggle" onclick="toggleGuide(this)">📖 データを守る・機種変更で引き継ぐ方法 ▼</button>
-      <div id="guide-body" style="display:none; margin-top:10px">
-        <div style="font-size:.85rem; color:var(--sub); margin-bottom:8px">同期コードの発行・保存・機種変更時の復元手順を、初心者向けにまとめています。</div>
-        <a href="help/" target="_blank" rel="noopener" class="small-act" style="display:inline-block; text-decoration:none">📖 ガイドを開く（別タブで開きます） ↗</a>
-      </div>
-    </div>
-    <div class="card">
       <div class="side-title" style="margin-top:0">⚙ 設定</div>
-      <button class="ghost" style="width:100%; font-size:.9rem" id="profile-toggle" onclick="toggleProfile(this)">👤 ユーザー情報 ▼</button>
-      <div id="profile-body" style="display:none; margin-top:10px">
+      <button class="ghost" style="width:100%; font-size:.9rem" id="data-toggle" onclick="toggleDataSettings(this)">💾 データ保存・引き継ぎ ▼</button>
+      <div id="data-body" style="display:none; margin-top:10px">
+        <div style="border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px; background:#fafcfe">
+          <div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:4px">📖 データを守る・機種変更で引き継ぐ方法</div>
+          <div style="font-size:.85rem; color:var(--sub); margin-bottom:8px">同期コードの発行・保存・機種変更時の復元手順を、初心者向けにまとめています。</div>
+          <a href="help/" target="_blank" rel="noopener" class="small-act" style="display:inline-block; text-decoration:none">📖 ガイドを開く（別タブで開きます） ↗</a>
+        </div>
+        <div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:6px">👤 ユーザー情報</div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
           <select id="univ-select" style="flex:1.2; min-width:150px" onchange="document.getElementById('univ-other').style.display=this.value==='__other__'?'':'none'"></select>
           <input type="text" id="univ-other" placeholder="大学名を入力" style="flex:1; min-width:130px; display:none">
@@ -181,8 +180,8 @@
           <button class="small-act" onclick="saveProfile()">保存</button>
         </div>
         <small id="profile-status" style="display:block; color:var(--sub); font-size:.75rem; margin-top:6px">大学名と学籍番号を設定すると、成績レポートに記載されます。</small>
+        <div id="sync-area" style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px"></div>
       </div>
-      <div id="sync-area" style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px"></div>
       <div id="manage-wrap" style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px">
         <button class="ghost" style="width:100%; font-size:.9rem" onclick="toggleManage(this)">🗃 問題セット・分野の管理を表示 ▼</button>
         <div id="view-manage" style="display:none; margin-top:10px"></div>
@@ -299,15 +298,20 @@ function initProfile(){
   }
 }
 /* 設定内の各セクションの開閉 */
-function toggleGuide(btn){
-  const el=document.getElementById("guide-body");
-  const open=el.style.display==="none"; el.style.display=open?"":"none";
-  btn.textContent=`📖 データを守る・機種変更で引き継ぐ方法 ${open?"▲":"▼"}`;
+function dataSettingsLabel(open){
+  const profileState=store.profile?"登録済み":"未登録";
+  const syncState=!syncReady()? "" : (store.sync?.code? "・同期有効" : "・同期未設定");
+  return `💾 データ保存・引き継ぎ（${profileState}${syncState}） ${open?"▲":"▼"}`;
 }
-function toggleProfile(btn){
-  const el=document.getElementById("profile-body");
+function refreshDataToggle(){
+  const btn=document.getElementById("data-toggle");
+  const body=document.getElementById("data-body");
+  if(btn) btn.textContent=dataSettingsLabel(body && body.style.display!=="none");
+}
+function toggleDataSettings(btn){
+  const el=document.getElementById("data-body");
   const open=el.style.display==="none"; el.style.display=open?"":"none";
-  btn.textContent=`👤 ユーザー情報${store.profile?"（登録済み）":""} ${open?"▲":"▼"}`;
+  btn.textContent=dataSettingsLabel(open);
 }
 /* 初回起動時：未登録なら大学・学籍番号の入力を必須で促す */
 function requireProfile(){
@@ -336,7 +340,7 @@ function requireProfile(){
     const sel=bg.querySelector("#req-univ");
     const univ=sel.value==="__other__"? bg.querySelector("#req-other").value.trim() : sel.value;
     const sid=bg.querySelector("#req-sid").value.trim();
-    if(commitProfile(univ,sid)){ bg.remove(); initProfile(); const tgl=document.getElementById("profile-toggle"); if(tgl) tgl.textContent="👤 ユーザー情報（登録済み） ▼"; updateHome(); }
+    if(commitProfile(univ,sid)){ bg.remove(); initProfile(); refreshDataToggle(); updateHome(); }
   };
   bg.querySelector("#req-restore").onclick=async ()=>{
     const code=bg.querySelector("#req-code").value;
@@ -345,7 +349,7 @@ function requireProfile(){
     if(!ok) return;
     if(store.profile && store.profile.univ && store.profile.sid){
       bg.remove();
-      const tgl=document.getElementById("profile-toggle"); if(tgl) tgl.textContent="👤 ユーザー情報（登録済み） ▼";
+      refreshDataToggle();
     }else{
       alert("記録は復元しましたが、大学・学籍番号が未登録でした。お手数ですが上で登録してください。");
     }
@@ -360,7 +364,7 @@ function commitProfile(univ,sid){
 }
 /* プロフィール登録済みで同期コードが無ければ自動発行し、端末内の記録をクラウドへ保存する（v3.12）。
    これにより生徒が「同期コードを発行」を押さなくても全員が管理者ダッシュボードに出る。
-   機種変更用の同期コードは従来どおり 設定→クラウド同期 で確認できる。 */
+   機種変更用の同期コードは従来どおり 設定→データ保存・引き継ぎ で確認できる。 */
 function ensureSyncCode(){
   if(!syncReady()) return false;
   if(!store.profile || !store.profile.univ || !store.profile.sid) return false;
@@ -377,11 +381,7 @@ function saveProfile(){
   const sid=document.getElementById("sid-input").value.trim();
   if(!commitProfile(univ,sid)) return;
   alert("✅ 保存しました");
-  /* 保存したらユーザー情報を閉じる */
-  const body=document.getElementById("profile-body");
-  const tgl=document.getElementById("profile-toggle");
-  if(body) body.style.display="none";
-  if(tgl) tgl.textContent="👤 ユーザー情報（登録済み） ▼";
+  refreshDataToggle();
 }
 function showProfileStatus(){
   const p=store.profile; if(!p) return;
@@ -451,8 +451,6 @@ function myAssignments(){
   });
 }
 function setSyncStatus(t){ syncStatus=t; const el=document.getElementById("sync-status"); if(el) el.textContent=t; }
-let syncOpen=false;
-function toggleSyncArea(){ syncOpen=!syncOpen; renderSync(); }
 function copySyncCode(){
   const code=store.sync?.code; if(!code) return;
   const done=()=>setSyncStatus("📋 同期コードをコピーしました");
@@ -469,8 +467,7 @@ function copySyncCode(){
 function renderSync(){
   const el=document.getElementById("sync-area"); if(!el) return;
   const state = !syncReady()? "" : (store.sync?.code? "（有効）" : "（未設定）");
-  const head=`<button class="ghost" style="width:100%; font-size:.85rem" onclick="toggleSyncArea()">☁ クラウド同期${state} ${syncOpen?"を隠す ▲":"の設定を表示 ▼"}</button>`;
-  if(!syncOpen){ el.innerHTML=head; return; }
+  const head=`<div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:6px">☁ クラウド同期${state}</div>`;
   let body="";
   if(!syncReady()){
     body=`<small style="color:var(--sub); font-size:.75rem">同期機能は準備中です（Firebase設定後に有効になります）</small>`;
@@ -495,7 +492,8 @@ function renderSync(){
       </div>
       <small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px"></small>`;
   }
-  el.innerHTML=head+`<div style="margin-top:10px">${body}</div>`;
+  el.innerHTML=head+body;
+  refreshDataToggle();
 }
 async function issueSyncCode(){
   store.sync={code:genCode()};
@@ -1441,8 +1439,7 @@ BUNDLED_SETS.forEach(s=>{
 /* 配布版（問題同梱）では問題セット・分野の管理は非表示（管理者はマスター版で編集） */
 if(BUNDLED_SETS.length>0){ const mw=document.getElementById("manage-wrap"); if(mw) mw.style.display="none"; }
 initProfile();
-/* 登録済みならユーザー情報トグルにその旨を表示 */
-if(store.profile){ const tgl=document.getElementById("profile-toggle"); if(tgl) tgl.textContent="👤 ユーザー情報（登録済み） ▼"; }
+refreshDataToggle();
 updateHome();
 initSync();
 /* 既に大学・学籍番号を登録済みだが同期コード未発行の生徒も、次回起動時に自動でコード発行＆

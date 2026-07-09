@@ -1,29 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+             && request.auth.token.email_verified == true
+             && request.auth.token.email in [
+                  'urutoraktiti@gmail.com'
+                ];
+    }
 
     // ===== 簿記2級 学生の学習記録（同期コードごと1件） =====
     match /boki2_sync/{code} {
       // 学生：同期コードを知っていれば、その1件だけ読み書きできる（従来どおり）
-      allow get, create, update: if true;
+      // ただし課題定義ドキュメント（assignments-config）は管理者だけが書き換え可能。
+      allow get: if true;
+      allow create, update: if code != 'assignments-config' || isAdmin();
 
       // 管理者だけ「一覧（list）」できる ＝ ダッシュボード用
       //  ・下のメールアドレスと、admin/index.html の ADMIN_EMAILS を必ず一致させること
       //  ・管理者を増やすときは、両方に追記する
-      allow list: if request.auth != null
-                  && request.auth.token.email_verified == true
-                  && request.auth.token.email in [
-                       'urutoraktiti@gmail.com'
-                     ];
+      allow list: if isAdmin();
 
       // 管理者だけ削除できる ＝ ダッシュボードの「この記録を削除」用
       //  ・list と同じ管理者メールに限定（学生は削除できない）
       //  ・管理者を増やすときは list と同じくここにも追記する
-      allow delete: if request.auth != null
-                    && request.auth.token.email_verified == true
-                    && request.auth.token.email in [
-                         'urutoraktiti@gmail.com'
-                       ];
+      allow delete: if isAdmin();
     }
 
     // ===== 3級版を作る場合は、ここに boki3_sync を同じ形で追加する =====
