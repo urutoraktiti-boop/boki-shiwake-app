@@ -124,6 +124,11 @@ async function init() {
     return;
   }
   setText("email-view", getParam("email") || "");
+  if (getParam("email") || getParam("univ") || getParam("role")) {
+    $("dashboard-link").style.display = "inline-block";
+    showMsg("パスワード設定が完了していれば、担当大学を確認して管理者ダッシュボードへログインしてください。担当大学が違う場合は、ログインせずに管理者へ連絡してください。");
+    return;
+  }
   showMsg("メール内の最新リンクから開いてください。", "err");
 }
 
