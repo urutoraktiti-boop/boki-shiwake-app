@@ -70,6 +70,10 @@
   .link-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-top:10px;}
   .link-card{border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff; font-size:.84rem;}
   .link-url{display:block; color:var(--sub); font-size:.74rem; word-break:break-all; margin:4px 0 8px;}
+  .admin-form{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;}
+  .admin-form input,.admin-form select{font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
+  .admin-list-item{border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fff; font-size:.84rem; display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;}
+  .role-badge{display:inline-block; border-radius:999px; padding:1px 8px; font-size:.74rem; font-weight:700; background:#e8eef7; color:var(--primary);}
   .assign-result-panel{border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:12px; background:#fafcfe;}
   .assign-result-head{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
   .mini-stat-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin:10px 0;}
@@ -93,7 +97,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.6</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.7</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -114,6 +118,21 @@
       <div class="sec-title">🏫 大学別の告知リンク</div>
       <p class="muted" style="margin-top:0">大学ごとのURLを学生に案内すると、学生側では大学名が固定され、学籍番号だけを入力する形になります。QRコードを作る場合は、このURLを使ってください。</p>
       <div id="univ-link-list" class="link-grid"></div>
+    </div>
+    <div class="card" id="admin-settings-card" style="display:none">
+      <div class="sec-title">🔐 管理者権限設定</div>
+      <p class="muted" style="margin-top:0">マスター管理者だけが編集できます。大学別管理者は、担当大学の学生と課題だけを管理する画面になります。</p>
+      <div class="admin-form">
+        <input id="admin-email-input" type="email" placeholder="管理者メールアドレス" style="min-width:240px; flex:1">
+        <select id="admin-role-select">
+          <option value="univ">大学別管理者</option>
+          <option value="master">マスター管理者</option>
+        </select>
+        <select id="admin-univ-select"></select>
+        <button id="admin-add-btn" class="primary">追加・更新</button>
+        <span id="admin-msg" class="muted"></span>
+      </div>
+      <div id="admin-list"></div>
     </div>
     <div class="card">
       <div class="controls">
@@ -166,8 +185,8 @@ const FIREBASE_CONFIG = {
   projectId: "boki-shiwake-app"
 };
 const SYNC_COLLECTION = "boki2_sync";
-/* 管理者として一覧を許可するメールアドレス（Firestoreルールと必ず一致させる） */
-const ADMIN_EMAILS = ["urutoraktiti@gmail.com"];
+/* マスター管理者（Firestoreルールの isMasterAdmin と必ず一致させる） */
+const MASTER_ADMIN_EMAILS = ["urutoraktiti@gmail.com"];
 
 /* ===== 初期化 ===== */
 const app = initializeApp(FIREBASE_CONFIG);
@@ -183,9 +202,12 @@ let sortKey = "univ";
 let sortAsc = true;
 let OPEN_UNIVS = new Set();
 let openAssignResultId = null;
+let currentUserEmail = "";
+let ADMIN_CONFIG = { admins: [] };
 
 /* ===== 課題（管理者が配信する5問セット） ===== */
 const ASSIGN_DOC = "assignments-config";   // boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない）
+const ADMIN_DOC = "admin-config";          // 管理者権限設定ドキュメント
 const META_URL = "../src/問題セット_第1問特集①-⑨.json";  // 問題メタ（group→問→qid→label）の取得元
 const META_SETKEY = "第1問特集①〜⑨";    // qid の接頭辞（生徒アプリの installSet と一致）
 /* 大学の選択肢（生徒アプリの UNIVERSITIES と一致。生徒未登録の大学も選べるように固定リストを用意） */
@@ -212,17 +234,84 @@ $("login-btn").onclick = async () => {
   }
 };
 
-onAuthStateChanged(auth, user => {
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+function defaultAdminConfig() {
+  return {
+    admins: MASTER_ADMIN_EMAILS.map(email => ({
+      email,
+      role: "master",
+      univs: ["*"],
+      createdAt: 0
+    }))
+  };
+}
+async function loadAdminConfig() {
+  ADMIN_CONFIG = defaultAdminConfig();
+  try {
+    const snap = await getDoc(doc(db, SYNC_COLLECTION, ADMIN_DOC));
+    if (!snap.exists()) return;
+    const f = snap.data();
+    let parsed = {};
+    try { parsed = f.data ? JSON.parse(f.data) : {}; } catch (e) { parsed = {}; }
+    const admins = Array.isArray(parsed.admins) ? parsed.admins : [];
+    const merged = [...defaultAdminConfig().admins, ...admins]
+      .map(a => ({
+        email: normalizeEmail(a.email),
+        role: a.role === "master" ? "master" : "univ",
+        univs: a.role === "master" ? ["*"] : (Array.isArray(a.univs) ? a.univs.filter(Boolean) : []),
+        createdAt: a.createdAt || 0
+      }))
+      .filter(a => a.email);
+    const byEmail = {};
+    merged.forEach(a => { byEmail[a.email] = a; });
+    ADMIN_CONFIG = { admins: Object.values(byEmail) };
+  } catch (e) {
+    if (!MASTER_ADMIN_EMAILS.includes(currentUserEmail)) throw e;
+  }
+}
+function currentAdmin() {
+  const email = currentUserEmail;
+  return ADMIN_CONFIG.admins.find(a => a.email === email) ||
+    (MASTER_ADMIN_EMAILS.includes(email) ? { email, role:"master", univs:["*"] } : null);
+}
+function isMaster() {
+  const a = currentAdmin();
+  return !!a && a.role === "master";
+}
+function allowedUnivs() {
+  const a = currentAdmin();
+  if (!a) return [];
+  if (a.role === "master") return ["*"];
+  return Array.isArray(a.univs) ? a.univs : [];
+}
+function canSeeUniv(univ) {
+  const list = allowedUnivs();
+  return list.includes("*") || list.includes(univ);
+}
+
+onAuthStateChanged(auth, async user => {
   if (user) {
-    const allowed = ADMIN_EMAILS.includes((user.email || "").toLowerCase());
+    currentUserEmail = normalizeEmail(user.email);
     $("user-box").innerHTML =
       `<span style="font-size:.82rem">${esc(user.email)}</span> ` +
       `<button id="logout-btn" style="margin-left:8px">ログアウト</button>`;
     $("logout-btn").onclick = () => signOut(auth);
+    try {
+      await loadAdminConfig();
+    } catch (e) {
+      $("login-view").style.display = "";
+      $("main-view").style.display = "none";
+      $("login-msg").textContent = "管理者設定の読み込みに失敗しました：" + (e.code || e.message);
+      return;
+    }
+    const allowed = !!currentAdmin();
     if (allowed) {
       $("login-view").style.display = "none";
       $("main-view").style.display = "";
       renderUnivLinks();
+      renderAdminSettings();
       loadProblemMeta().then(loadData);   // 問題メタを先に読み込んでから集計・描画（ラベル表示のため）
     } else {
       $("login-view").style.display = "";
@@ -231,6 +320,8 @@ onAuthStateChanged(auth, user => {
         `このアカウント（${user.email}）には閲覧権限がありません。管理者用アカウントでログインしてください。`;
     }
   } else {
+    currentUserEmail = "";
+    ADMIN_CONFIG = defaultAdminConfig();
     $("user-box").innerHTML = "";
     $("login-view").style.display = "";
     $("main-view").style.display = "none";
@@ -249,8 +340,8 @@ async function loadData() {
       const f = doc.data();
       let data = {};
       try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
-      // 課題定義ドキュメント（および万一の予約ID）は学生行に入れない
-      if (doc.id === ASSIGN_DOC || doc.id.startsWith("__")) {
+      // 課題定義・管理者設定ドキュメント（および万一の予約ID）は学生行に入れない
+      if (doc.id === ASSIGN_DOC || doc.id === ADMIN_DOC || doc.id.startsWith("__")) {
         if (doc.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
         return;
       }
@@ -286,6 +377,7 @@ async function loadData() {
         attemptsTotal: tests.length
       });
     });
+    ROWS = ROWS.filter(r => canSeeUniv(r.univ));
     GROUPS = [...groupSet].sort((a, b) => a.localeCompare(b, "ja"));
     buildUnivFilter();
     renderUnivLinks();
@@ -325,7 +417,8 @@ function studentURLFor(code) {
 function renderUnivLinks() {
   const box = $("univ-link-list");
   if (!box) return;
-  box.innerHTML = UNIVERSITY_LINKS.map(u => {
+  const links = UNIVERSITY_LINKS.filter(u => canSeeUniv(u.name));
+  box.innerHTML = links.map(u => {
     const url = studentURLFor(u.code);
     return `<div class="link-card">
       <b>${esc(u.name)}</b>
@@ -333,7 +426,7 @@ function renderUnivLinks() {
       <button data-copy-link="${esc(url)}">リンクをコピー</button>
       <a href="${esc(url)}" target="_blank" rel="noopener" style="margin-left:8px; font-size:.82rem">開く</a>
     </div>`;
-  }).join("");
+  }).join("") || `<p class="muted">担当大学が設定されていません。マスター管理者にご確認ください。</p>`;
   box.querySelectorAll("[data-copy-link]").forEach(btn => {
     btn.onclick = async () => {
       const url = btn.dataset.copyLink;
@@ -346,6 +439,107 @@ function renderUnivLinks() {
       }
     };
   });
+}
+
+function adminConfigPayload() {
+  const admins = ADMIN_CONFIG.admins
+    .map(a => ({
+      email: normalizeEmail(a.email),
+      role: a.role === "master" ? "master" : "univ",
+      univs: a.role === "master" ? ["*"] : (Array.isArray(a.univs) ? a.univs.filter(Boolean) : []),
+      createdAt: a.createdAt || Date.now()
+    }))
+    .filter(a => a.email);
+  const adminsMap = {};
+  admins.forEach(a => { adminsMap[a.email] = { role: a.role, univs: a.univs }; });
+  return { admins, adminsMap };
+}
+function renderAdminSettings() {
+  const card = $("admin-settings-card");
+  if (!card) return;
+  card.style.display = isMaster() ? "" : "none";
+  if (!isMaster()) return;
+  const univSel = $("admin-univ-select");
+  if (univSel) {
+    univSel.innerHTML = UNIVERSITIES.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+  }
+  const roleSel = $("admin-role-select");
+  if (roleSel) {
+    roleSel.onchange = () => {
+      $("admin-univ-select").style.display = roleSel.value === "master" ? "none" : "";
+    };
+    roleSel.onchange();
+  }
+  renderAdminList();
+}
+function renderAdminList() {
+  const box = $("admin-list");
+  if (!box) return;
+  const list = ADMIN_CONFIG.admins
+    .slice()
+    .sort((a, b) => (a.role === b.role ? a.email.localeCompare(b.email) : a.role.localeCompare(b.role)));
+  box.innerHTML = list.map(a => {
+    const label = a.role === "master" ? "マスター管理者" : "大学別管理者";
+    const univs = a.role === "master" ? "全大学" : (a.univs || []).join("、");
+    const fixed = MASTER_ADMIN_EMAILS.includes(a.email);
+    return `<div class="admin-list-item">
+      <div><b>${esc(a.email)}</b> <span class="role-badge">${esc(label)}</span><br><span class="muted">担当：${esc(univs || "未設定")}</span></div>
+      ${fixed ? `<span class="muted">基本管理者</span>` : `<button data-admin-del="${esc(a.email)}" style="color:#b91c1c; border-color:#fca5a5; background:#fee2e2">削除</button>`}
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-admin-del]").forEach(btn => {
+    btn.onclick = () => deleteAdmin(btn.dataset.adminDel);
+  });
+}
+async function saveAdminConfig() {
+  const payload = adminConfigPayload();
+  await setDoc(doc(db, SYNC_COLLECTION, ADMIN_DOC), {
+    data: JSON.stringify({ admins: payload.admins, updatedAt: Date.now() }),
+    adminsMap: payload.adminsMap,
+    updatedAt: Date.now()
+  });
+}
+async function upsertAdmin() {
+  if (!isMaster()) return;
+  const email = normalizeEmail($("admin-email-input").value);
+  const role = $("admin-role-select").value === "master" ? "master" : "univ";
+  const univ = $("admin-univ-select").value;
+  if (!email || !email.includes("@")) { $("admin-msg").innerHTML = `<span class="err">メールアドレスを入力してください。</span>`; return; }
+  if (role === "univ" && !univ) { $("admin-msg").innerHTML = `<span class="err">担当大学を選択してください。</span>`; return; }
+  const rec = {
+    email,
+    role,
+    univs: role === "master" ? ["*"] : [univ],
+    createdAt: Date.now()
+  };
+  const idx = ADMIN_CONFIG.admins.findIndex(a => a.email === email);
+  if (idx >= 0) ADMIN_CONFIG.admins[idx] = { ...ADMIN_CONFIG.admins[idx], ...rec };
+  else ADMIN_CONFIG.admins.push(rec);
+  $("admin-msg").textContent = "保存中…";
+  try {
+    await saveAdminConfig();
+    $("admin-email-input").value = "";
+    $("admin-msg").textContent = "保存しました。";
+    renderAdminList();
+    setTimeout(() => { $("admin-msg").textContent = ""; }, 1800);
+  } catch (e) {
+    $("admin-msg").innerHTML = `<span class="err">保存に失敗しました：${esc(e.code || e.message)}</span>`;
+  }
+}
+async function deleteAdmin(email) {
+  if (!isMaster()) return;
+  email = normalizeEmail(email);
+  if (MASTER_ADMIN_EMAILS.includes(email)) { alert("基本管理者は削除できません。"); return; }
+  if (!confirm(`${email} の管理者権限を削除します。よろしいですか？`)) return;
+  const before = ADMIN_CONFIG.admins.slice();
+  ADMIN_CONFIG.admins = ADMIN_CONFIG.admins.filter(a => a.email !== email);
+  try {
+    await saveAdminConfig();
+    renderAdminList();
+  } catch (e) {
+    ADMIN_CONFIG.admins = before;
+    alert("削除に失敗しました：" + (e.code || e.message));
+  }
 }
 
 /* ===== 短縮ラベル（仕訳対策問題① → ①） ===== */
@@ -479,16 +673,19 @@ function toggleDetail(tr, r) {
   }).join("");
   const row = document.createElement("tr");
   row.className = "detail-row";
+  const deleteBlock = isMaster() ? `
+    <div style="margin-top:10px; border-top:1px solid #e2e8f0; padding-top:8px">
+      <button class="row-del-btn" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; border-radius:8px; padding:6px 14px; font-size:.82rem; cursor:pointer">🗑 この記録を削除</button>
+    </div>` : "";
   row.innerHTML = `<td colspan="99">
     <div style="margin-bottom:6px"><b>${esc(r.univ)}｜${esc(r.sid)}</b>
       <span class="muted">（同期コード：${esc(r.code)}）</span></div>
     <div class="detail-grid">${chips}</div>
-    <div style="margin-top:10px; border-top:1px solid #e2e8f0; padding-top:8px">
-      <button class="row-del-btn" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; border-radius:8px; padding:6px 14px; font-size:.82rem; cursor:pointer">🗑 この記録を削除</button>
-    </div>
+    ${deleteBlock}
   </td>`;
   tr.after(row);
-  row.querySelector(".row-del-btn").onclick = () => deleteRow(r);
+  const del = row.querySelector(".row-del-btn");
+  if (del) del.onclick = () => deleteRow(r);
 }
 
 /* 記録の削除（2段階の確認）。クラウドの1件のみ削除。学生の端末データは消えない。
@@ -544,7 +741,9 @@ async function loadProblemMeta() {
 function currentUnivs() {
   // 固定リスト（生徒未登録の大学も選べる）＋ 実データに現れた大学 を統合
   const fromData = ROWS.map(r => r.univ).filter(u => u && u !== "（未登録）");
-  return [...new Set([...UNIVERSITIES, ...fromData])].sort((a, b) => a.localeCompare(b, "ja"));
+  return [...new Set([...UNIVERSITIES, ...fromData])]
+    .filter(u => canSeeUniv(u))
+    .sort((a, b) => a.localeCompare(b, "ja"));
 }
 function targetLabel(t) {
   t = t || { mode: "all" };
@@ -563,16 +762,25 @@ function qidLabel(qid) {
   const m = META.find(x => x.qid === qid);
   return m ? m.label : qid;   // 例：「特集① 問1」
 }
+function canManageAssignment(a) {
+  if (isMaster()) return true;
+  const t = (a && a.target) || {};
+  return t.mode === "univ" && canSeeUniv(t.univ);
+}
+function visibleAssignments() {
+  return ASSIGN_DEFS.filter(canManageAssignment);
+}
 
 /* 既存課題の一覧 */
 function renderAssignManage() {
   const box = $("assign-list");
   if (!box) return;
-  if (!ASSIGN_DEFS.length) {
+  const list = visibleAssignments();
+  if (!list.length) {
     box.innerHTML = `<p class="muted">まだ課題はありません。「＋ 新しい課題を作る」から作成してください。</p>`;
     return;
   }
-  box.innerHTML = ASSIGN_DEFS.map(a => `
+  box.innerHTML = list.map(a => `
     <div class="assign-list-item">
       <b>${esc(a.title || "課題")}</b>　<span class="muted">${esc(targetLabel(a.target))}｜${(a.qids || []).length}問</span>
       <div class="muted" style="margin:4px 0">${(a.qids || []).map(q => esc(qidLabel(q))).join("／")}</div>
@@ -597,6 +805,9 @@ function openAssignForm(id) {
   }
   const selected = new Set(a ? (a.qids || []) : []);
   const t = a ? (a.target || { mode: "all" }) : { mode: "all" };
+  const scopedUnivs = currentUnivs();
+  const initialMode = isMaster() ? t.mode : "univ";
+  const initialUniv = isMaster() ? (t.univ || "") : ((t.mode === "univ" && canSeeUniv(t.univ)) ? t.univ : (scopedUnivs[0] || ""));
   // group ごとに問をまとめる
   const groups = [...new Set(META.map(m => m.group))].sort((x, y) => x.localeCompare(y, "ja"));
   const picker = groups.map(g => {
@@ -605,7 +816,7 @@ function openAssignForm(id) {
     ).join("");
     return `<div class="assign-group"><b>${esc(g)}</b>${items}</div>`;
   }).join("");
-  const univOpts = currentUnivs().map(u => `<option value="${esc(u)}" ${t.mode === "univ" && t.univ === u ? "selected" : ""}>${esc(u)}</option>`).join("");
+  const univOpts = scopedUnivs.map(u => `<option value="${esc(u)}" ${initialUniv === u ? "selected" : ""}>${esc(u)}</option>`).join("");
   form.style.display = "";
   form.innerHTML = `
     <div class="assign-row-form" style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:10px; background:#f7fafd">
@@ -613,15 +824,15 @@ function openAssignForm(id) {
       <input id="assign-title" type="text" placeholder="例：第2回 確認課題" value="${esc(a ? (a.title || "") : "")}">
       <label>対象</label>
       <select id="assign-mode">
-        <option value="all" ${t.mode === "all" ? "selected" : ""}>全員</option>
-        <option value="univ" ${t.mode === "univ" ? "selected" : ""}>特定の大学</option>
-        <option value="sids" ${t.mode === "sids" ? "selected" : ""}>特定の学籍番号（リスト）</option>
+        ${isMaster() ? `<option value="all" ${initialMode === "all" ? "selected" : ""}>全員</option>` : ""}
+        <option value="univ" ${initialMode === "univ" ? "selected" : ""}>特定の大学</option>
+        ${isMaster() ? `<option value="sids" ${initialMode === "sids" ? "selected" : ""}>特定の学籍番号（リスト）</option>` : ""}
       </select>
-      <div id="assign-univ-wrap" style="display:${t.mode === "univ" ? "" : "none"}">
+      <div id="assign-univ-wrap" style="display:${initialMode === "univ" ? "" : "none"}">
         <label>大学を選択</label>
         <select id="assign-univ"><option value="">（選択してください）</option>${univOpts}</select>
       </div>
-      <div id="assign-sids-wrap" style="display:${t.mode === "sids" ? "" : "none"}">
+      <div id="assign-sids-wrap" style="display:${initialMode === "sids" ? "" : "none"}">
         <label>学籍番号（カンマ・改行・スペース区切り）</label>
         <textarea id="assign-sids" rows="3" placeholder="1001, 1002, 1003">${esc(t.mode === "sids" ? (t.sids || []).join(", ") : "")}</textarea>
       </div>
@@ -659,11 +870,17 @@ async function saveAssignment() {
   if (!title) { $("assign-msg").innerHTML = `<span class="err">課題名を入力してください。</span>`; return; }
   if (!qids.length) { $("assign-msg").innerHTML = `<span class="err">問題を1つ以上選んでください。</span>`; return; }
   let target = { mode: "all" };
+  if (mode === "all" && !isMaster()) {
+    $("assign-msg").innerHTML = `<span class="err">全員向け課題はマスター管理者のみ作成できます。</span>`;
+    return;
+  }
   if (mode === "univ") {
     const u = $("assign-univ").value;
     if (!u) { $("assign-msg").innerHTML = `<span class="err">大学を選択してください。</span>`; return; }
+    if (!canSeeUniv(u)) { $("assign-msg").innerHTML = `<span class="err">担当外の大学は選択できません。</span>`; return; }
     target = { mode: "univ", univ: u };
   } else if (mode === "sids") {
+    if (!isMaster()) { $("assign-msg").innerHTML = `<span class="err">学籍番号指定の課題はマスター管理者のみ作成できます。</span>`; return; }
     const sids = $("assign-sids").value.split(/[\s,、]+/).map(s => s.trim()).filter(Boolean);
     if (!sids.length) { $("assign-msg").innerHTML = `<span class="err">学籍番号を入力してください。</span>`; return; }
     target = { mode: "sids", sids };
@@ -676,6 +893,10 @@ async function saveAssignment() {
     if (snap.exists()) { try { arr = JSON.parse(snap.data().data).assignments || []; } catch (e) { arr = []; } }
     const id = editingId || ("a" + Date.now());
     const existing = arr.find(x => x.id === id);
+    if (existing && !canManageAssignment(existing)) {
+      $("assign-msg").innerHTML = `<span class="err">担当外の課題は編集できません。</span>`;
+      return;
+    }
     const rec = { id, title, target, qids, createdAt: existing ? existing.createdAt : Date.now() };
     if (existing) Object.assign(existing, rec); else arr.push(rec);
     await setDoc(doc(db, SYNC_COLLECTION, ASSIGN_DOC), { data: JSON.stringify({ assignments: arr, updatedAt: Date.now() }), updatedAt: Date.now() });
@@ -693,6 +914,7 @@ async function saveAssignment() {
 async function deleteAssignment(id) {
   const a = ASSIGN_DEFS.find(x => x.id === id);
   if (!a) return;
+  if (!canManageAssignment(a)) { alert("担当外の課題は削除できません。"); return; }
   if (!confirm(`課題「${a.title || ""}」を削除します。よろしいですか？\n（生徒の既存の成績記録は消えません）`)) return;
   try {
     let arr = [];
@@ -840,6 +1062,7 @@ $("reload-btn").onclick = loadData;
 $("univ-filter").onchange = render;
 $("search-box").oninput = render;
 $("assign-new-btn").onclick = () => openAssignForm(null);
+$("admin-add-btn").onclick = upsertAdmin;
 </script>
 </body>
 </html>
