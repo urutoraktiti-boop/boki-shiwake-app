@@ -34,7 +34,7 @@
     <p>簿記2級 仕訳トレーニング｜管理者ダッシュボード</p>
   </header>
   <div class="card">
-    <p>担当大学が正しいことを確認してから、パスワードを設定してください。</p>
+    <p>メールアドレス・権限・担当大学が正しいことを確認してください。</p>
     <div class="label">メールアドレス</div>
     <div class="value" id="email-view">確認中...</div>
     <div class="label">権限</div>
@@ -42,7 +42,10 @@
     <div class="label">担当大学</div>
     <div class="value" id="univ-view">確認中...</div>
     <div class="warn-box">
-      担当大学が違う場合は、管理者ダッシュボードにログインせず、マスター管理者へ連絡してください。正しい担当大学で案内メールを再送してもらってください。
+      担当大学が違う場合は、パスワード設定メールを送らず、マスター管理者へ連絡してください。正しい担当大学で確認リンクを再発行してもらってください。
+    </div>
+    <div id="confirm-area" style="display:none">
+      <button id="send-password-mail-btn">内容を確認してパスワード設定メールを送る</button>
     </div>
     <div id="reset-area" style="display:none">
       <label for="password-input">新しいパスワード</label>
@@ -57,7 +60,7 @@
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, verifyPasswordResetCode, confirmPasswordReset, applyActionCode } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, verifyPasswordResetCode, confirmPasswordReset, applyActionCode, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyC29p0TS5K8FFs4s0ICxRrcOSLdXOnwIII",
@@ -66,6 +69,7 @@ const FIREBASE_CONFIG = {
 };
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
+const ADMIN_URL = "https://urutoraktiti-boop.github.io/boki-shiwake-app/admin/";
 const params = new URLSearchParams(location.search);
 const mode = params.get("mode") || "";
 const code = params.get("oobCode") || "";
@@ -89,9 +93,11 @@ function showMsg(text, cls="muted") {
 }
 function authErrorMessage(e) {
   const code = e.code || "";
-  if (code === "auth/expired-action-code") return "リンクの有効期限が切れています。マスター管理者に案内メールの再送を依頼してください。";
-  if (code === "auth/invalid-action-code") return "リンクが無効です。最新の案内メールから開いてください。";
+  if (code === "auth/expired-action-code") return "リンクの有効期限が切れています。マスター管理者に確認リンクの再発行を依頼してください。";
+  if (code === "auth/invalid-action-code") return "リンクが無効です。最新の確認リンクから開いてください。";
   if (code === "auth/weak-password") return "パスワードが短すぎます。6文字以上で設定してください。";
+  if (code === "auth/user-not-found") return "このメールアドレスの管理者アカウントが見つかりません。マスター管理者に確認リンクの再発行を依頼してください。";
+  if (code === "auth/too-many-requests") return "短時間に送信が続いたため、一時的に制限されています。少し時間を置いてからもう一度お試しください。";
   return e.message || code || "処理に失敗しました。";
 }
 
@@ -125,12 +131,31 @@ async function init() {
   }
   setText("email-view", getParam("email") || "");
   if (getParam("email") || getParam("univ") || getParam("role")) {
-    $("dashboard-link").style.display = "inline-block";
-    showMsg("パスワード設定が完了していれば、担当大学を確認して管理者ダッシュボードへログインしてください。担当大学が違う場合は、ログインせずに管理者へ連絡してください。");
+    $("confirm-area").style.display = "";
+    showMsg("内容が正しければ、パスワード設定メールを送ってください。担当大学が違う場合は送信せず、マスター管理者へ連絡してください。");
     return;
   }
   showMsg("メール内の最新リンクから開いてください。", "err");
 }
+
+$("send-password-mail-btn").onclick = async () => {
+  const email = getParam("email");
+  if (!email || !email.includes("@")) { showMsg("メールアドレスを確認できません。マスター管理者に確認リンクの再発行を依頼してください。", "err"); return; }
+  $("send-password-mail-btn").disabled = true;
+  showMsg("パスワード設定メールを送信しています...");
+  try {
+    await sendPasswordResetEmail(auth, email, {
+      url: ADMIN_URL,
+      handleCodeInApp: false
+    });
+    $("confirm-area").style.display = "none";
+    showMsg("パスワード設定メールを送信しました。メール内のリンクでパスワードを設定し、その後、管理者ダッシュボードへログインしてください。", "ok");
+    $("dashboard-link").style.display = "inline-block";
+  } catch (e) {
+    $("send-password-mail-btn").disabled = false;
+    showMsg(authErrorMessage(e), "err");
+  }
+};
 
 $("set-password-btn").onclick = async () => {
   const p1 = $("password-input").value;

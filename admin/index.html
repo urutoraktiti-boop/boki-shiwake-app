@@ -123,7 +123,7 @@
         <button id="email-signup-btn">初回パスワード設定</button>
         <button id="password-reset-btn">パスワード再設定</button>
       </div>
-      <p class="muted" style="margin-top:8px">マスター管理者から届いた案内メールでパスワード設定を行ってからログインしてください。</p>
+      <p class="muted" style="margin-top:8px">マスター管理者から届いた確認リンクで担当大学を確認し、パスワード設定メールを送ってからログインしてください。</p>
     </div>
     <p id="login-msg" class="err" style="margin-top:14px"></p>
   </div>
@@ -273,7 +273,7 @@ function inviteErrorMessage(e) {
   if (msg.includes("OPERATION_NOT_ALLOWED")) return "Firebase Authenticationでメール/パスワードログインが有効になっていません。";
   if (msg.includes("INVALID_EMAIL")) return "メールアドレスの形式が正しくありません。";
   if (msg.includes("TOO_MANY_ATTEMPTS_TRY_LATER")) return "短時間に送信が続いたため、一時的に制限されています。少し時間を置いて再送してください。";
-  return msg || "案内メールの送信に失敗しました。";
+  return msg || "確認リンクの作成に失敗しました。";
 }
 $("email-login-btn").onclick = async () => {
   $("login-msg").textContent = "";
@@ -576,7 +576,7 @@ function renderAdminList() {
       ${fixed
         ? `<span class="muted">基本管理者</span>`
         : `<div style="display:flex; gap:6px; flex-wrap:wrap">
-            <button data-admin-invite="${esc(a.email)}">案内メール再送</button>
+            <button data-admin-invite="${esc(a.email)}">確認リンク作成</button>
             <button data-admin-del="${esc(a.email)}" style="color:#b91c1c; border-color:#fca5a5; background:#fee2e2">削除</button>
           </div>`}
     </div>`;
@@ -627,24 +627,35 @@ async function ensureAuthUserForInvite(email) {
 }
 async function sendAdminInvite(rec) {
   await ensureAuthUserForInvite(rec.email);
-  await sendPasswordResetEmail(auth, rec.email, {
-    url: inviteContinueUrl(rec),
-    handleCodeInApp: false
-  });
+  return inviteContinueUrl(rec);
+}
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {}
+  }
+  window.prompt("この確認リンクをコピーして、追加する管理者へ送ってください。", text);
+  return false;
+}
+function inviteLinkMessage(email, url, copied) {
+  const copyText = copied ? "確認リンクをコピーしました。" : "確認リンクを作成しました。";
+  return `${copyText} ${email} にこのリンクを送り、担当大学を確認してからパスワード設定メールを送ってもらってください。<br><a href="${esc(url)}" target="_blank" rel="noopener">確認ページを開く</a>`;
 }
 async function resendAdminInvite(email) {
   if (!isMaster()) return;
   email = normalizeEmail(email);
   const rec = ADMIN_CONFIG.admins.find(a => normalizeEmail(a.email) === email);
   if (!rec) { alert("管理者設定が見つかりません。"); return; }
-  $("admin-msg").textContent = "案内メールを送信中…";
+  $("admin-msg").textContent = "確認リンクを作成中…";
   try {
-    await sendAdminInvite(rec);
-    $("admin-msg").textContent = `${email} に案内メールを再送しました。`;
-    setTimeout(() => { $("admin-msg").textContent = ""; }, 3000);
+    const url = await sendAdminInvite(rec);
+    const copied = await copyText(url);
+    $("admin-msg").innerHTML = inviteLinkMessage(email, url, copied);
   } catch (e) {
     const msg = inviteErrorMessage(e);
-    $("admin-msg").innerHTML = `<span class="err">案内メールの送信に失敗しました：${esc(msg)}</span>`;
+    $("admin-msg").innerHTML = `<span class="err">確認リンクの作成に失敗しました：${esc(msg)}</span>`;
   }
 }
 async function upsertAdmin() {
@@ -672,14 +683,14 @@ async function upsertAdmin() {
     $("admin-msg").innerHTML = `<span class="err">保存に失敗しました：${esc(e.code || e.message)}</span>`;
     return;
   }
-  $("admin-msg").textContent = "保存しました。案内メールを送信中…";
+  $("admin-msg").textContent = "保存しました。確認リンクを作成中…";
   try {
-    await sendAdminInvite(rec);
-    $("admin-msg").textContent = `${email} に案内メールを送信しました。`;
-    setTimeout(() => { $("admin-msg").textContent = ""; }, 3000);
+    const url = await sendAdminInvite(rec);
+    const copied = await copyText(url);
+    $("admin-msg").innerHTML = inviteLinkMessage(email, url, copied);
   } catch (e) {
     const msg = inviteErrorMessage(e);
-    $("admin-msg").innerHTML = `<span class="err">保存しましたが、案内メールの送信に失敗しました：${esc(msg || e.code || e.message)}。管理者一覧の「案内メール再送」をお試しください。</span>`;
+    $("admin-msg").innerHTML = `<span class="err">保存しましたが、確認リンクの作成に失敗しました：${esc(msg || e.code || e.message)}。管理者一覧の「確認リンク作成」をお試しください。</span>`;
   }
 }
 async function deleteAdmin(email) {
