@@ -503,17 +503,23 @@ function studentURLFor(code) {
   url.searchParams.set("univ", code);
   return url.href;
 }
+function studentPreviewURLFor(code) {
+  const url = new URL(studentURLFor(code));
+  url.searchParams.set("preview", "admin");
+  return url.href;
+}
 function renderUnivLinks() {
   const box = $("univ-link-list");
   if (!box) return;
   const links = UNIVERSITY_LINKS.filter(u => canSeeUniv(u.name));
   box.innerHTML = links.map(u => {
     const url = studentURLFor(u.code);
+    const previewUrl = studentPreviewURLFor(u.code);
     return `<div class="link-card">
       <b>${esc(u.name)}</b>
       <span class="link-url">${esc(url)}</span>
       <button data-copy-link="${esc(url)}">リンクをコピー</button>
-      <a href="${esc(url)}" target="_blank" rel="noopener" style="margin-left:8px; font-size:.82rem">開く</a>
+      <a href="${esc(previewUrl)}" target="_blank" rel="noopener" style="margin-left:8px; font-size:.82rem">確認用に開く</a>
     </div>`;
   }).join("") || `<p class="muted">担当大学が設定されていません。マスター管理者にご確認ください。</p>`;
   box.querySelectorAll("[data-copy-link]").forEach(btn => {
