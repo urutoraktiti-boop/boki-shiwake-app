@@ -129,7 +129,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.13配布版</span></h1>
+    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.14配布版</span></h1>
     <p>仕訳問題対策</p>
   </header>
   <div id="err-banner" style="display:none; background:#fdeeee; color:#d94f4f; border:1px solid #f2c9c9; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:.82rem; word-break:break-all"></div>
@@ -173,11 +173,13 @@
           <a href="help/" target="_blank" rel="noopener" class="small-act" style="display:inline-block; text-decoration:none">📖 ガイドを開く（別タブで開きます） ↗</a>
         </div>
         <div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:6px">👤 ユーザー情報</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+        <div id="profile-current" style="border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:8px; background:#fff"></div>
+        <div id="profile-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
           <select id="univ-select" style="flex:1.2; min-width:150px" onchange="document.getElementById('univ-other').style.display=this.value==='__other__'?'':'none'"></select>
           <input type="text" id="univ-other" placeholder="大学名を入力" style="flex:1; min-width:130px; display:none">
           <input type="text" id="sid-input" placeholder="学籍番号" style="flex:1; min-width:110px">
           <button class="small-act" onclick="saveProfile()">保存</button>
+          <button class="small-act" id="profile-cancel" style="display:none" onclick="cancelProfileEdit()">キャンセル</button>
         </div>
         <small id="profile-status" style="display:block; color:var(--sub); font-size:.75rem; margin-top:6px">大学名と学籍番号を設定すると、成績レポートに記載されます。</small>
         <div id="sync-area" style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px"></div>
@@ -286,16 +288,58 @@ function univOptionsHTML(){
     +UNIVERSITIES.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join("")
     +`<option value="__other__">その他（直接入力）</option>`;
 }
-function initProfile(){
+let profileEditOpen=false;
+function setProfileInputs(p){
   const sel=document.getElementById("univ-select");
   sel.innerHTML=univOptionsHTML();
-  const p=store.profile;
+  const other=document.getElementById("univ-other");
+  const sid=document.getElementById("sid-input");
+  if(other){ other.style.display="none"; other.value=""; }
+  if(sid) sid.value="";
   if(p){
     if(UNIVERSITIES.includes(p.univ)) sel.value=p.univ;
-    else if(p.univ){ sel.value="__other__"; const o=document.getElementById("univ-other"); o.style.display=""; o.value=p.univ; }
-    document.getElementById("sid-input").value=p.sid||"";
-    showProfileStatus();
+    else if(p.univ && other){ sel.value="__other__"; other.style.display=""; other.value=p.univ; }
+    if(sid) sid.value=p.sid||"";
   }
+}
+function initProfile(){
+  setProfileInputs(store.profile);
+  renderProfileArea();
+  showProfileStatus();
+}
+function renderProfileArea(){
+  const p=store.profile;
+  const current=document.getElementById("profile-current");
+  const form=document.getElementById("profile-form");
+  const cancel=document.getElementById("profile-cancel");
+  const status=document.getElementById("profile-status");
+  if(!current || !form) return;
+  if(p && p.univ && p.sid && !profileEditOpen){
+    current.style.display="";
+    current.innerHTML=`
+      <div style="font-size:.85rem; color:var(--sub); margin-bottom:4px">現在の登録情報</div>
+      <div style="font-weight:700; margin-bottom:8px">${esc(p.univ)}｜${esc(p.sid)}</div>
+      <button class="small-act" onclick="startProfileEdit()">ユーザー情報を修正する</button>
+      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">修正しても同期コードは変わりません。管理者画面には次回同期後、新しい大学名・学籍番号で表示されます。</small>`;
+    form.style.display="none";
+    if(cancel) cancel.style.display="none";
+    if(status) status.textContent="";
+  }else{
+    current.style.display="none";
+    form.style.display="flex";
+    if(cancel) cancel.style.display=(p && p.univ && p.sid) ? "" : "none";
+    if(status) status.textContent=p ? "修正後も同じ同期コードで保存されます。" : "大学名と学籍番号を設定すると、成績レポートに記載されます。";
+  }
+}
+function startProfileEdit(){
+  profileEditOpen=true;
+  setProfileInputs(store.profile);
+  renderProfileArea();
+}
+function cancelProfileEdit(){
+  profileEditOpen=false;
+  setProfileInputs(store.profile);
+  renderProfileArea();
 }
 /* 設定内の各セクションの開閉 */
 function dataSettingsLabel(open){
@@ -320,7 +364,7 @@ function requireProfile(){
   bg.className="modal-bg";
   bg.innerHTML=`<div class="modal">
        <h3 style="margin-top:0">はじめに登録してください</h3>
-       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、あなたの<b>大学</b>と<b>学籍番号</b>を登録してください。（あとで「設定 → ユーザー情報」から変更できます）</div>
+       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、あなたの<b>大学</b>と<b>学籍番号</b>を登録してください。（あとで「設定 → データ保存・引き継ぎ」から修正できます）</div>
        <div style="display:flex; flex-direction:column; gap:8px">
          <select id="req-univ" onchange="document.getElementById('req-other').style.display=this.value==='__other__'?'':'none'">${univOptionsHTML()}</select>
          <input type="text" id="req-other" placeholder="大学名を入力" style="display:none">
@@ -381,11 +425,12 @@ function saveProfile(){
   const sid=document.getElementById("sid-input").value.trim();
   if(!commitProfile(univ,sid)) return;
   alert("✅ 保存しました");
+  profileEditOpen=false;
+  renderProfileArea();
   refreshDataToggle();
 }
 function showProfileStatus(){
   const p=store.profile; if(!p) return;
-  document.getElementById("profile-status").innerHTML=`✅ 登録済み：<b>${esc(p.univ)}｜${esc(p.sid)}</b>`;
   const hdr=document.querySelector("header p");
   hdr.textContent=`仕訳問題対策｜${p.univ}　${p.sid}`;
 }
