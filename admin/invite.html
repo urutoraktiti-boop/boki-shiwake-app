@@ -19,6 +19,7 @@
   .muted{color:var(--sub); font-size:.9rem;}
   .err{color:var(--err); font-weight:700;}
   .ok{color:var(--ok); font-weight:700;}
+  .warn-box{border:1px solid #f3c66d; background:#fff7e6; color:#6b4a00; border-radius:8px; padding:10px 12px; margin-top:16px; font-size:.92rem;}
   label{display:block; font-size:.85rem; font-weight:700; margin:14px 0 4px;}
   input{width:100%; font-family:inherit; font-size:16px; padding:10px; border:1px solid var(--line); border-radius:8px;}
   button,a.button{display:inline-block; border:0; text-decoration:none; background:var(--primary); color:#fff; border-radius:8px; padding:10px 16px; font-weight:700; margin-top:12px; cursor:pointer; font-family:inherit; font-size:.95rem;}
@@ -40,13 +41,15 @@
     <div class="value" id="role-view">確認中...</div>
     <div class="label">担当大学</div>
     <div class="value" id="univ-view">確認中...</div>
-    <p class="muted" style="margin-top:16px">担当大学が違う場合は、パスワードを設定せずにマスター管理者へ連絡してください。</p>
+    <div class="warn-box">
+      担当大学が違う場合は、パスワードを設定しないでください。管理者に連絡し、正しい担当大学で案内メールを再送してもらってください。
+    </div>
     <div id="reset-area" style="display:none">
       <label for="password-input">新しいパスワード</label>
       <input id="password-input" type="password" autocomplete="new-password" placeholder="6文字以上">
       <label for="password-confirm-input">新しいパスワード（確認）</label>
       <input id="password-confirm-input" type="password" autocomplete="new-password" placeholder="もう一度入力">
-      <button id="set-password-btn">確認してパスワードを設定</button>
+      <button id="set-password-btn">担当大学を確認してパスワードを設定</button>
     </div>
     <p id="msg" class="muted" style="margin-top:14px"></p>
     <a id="dashboard-link" class="button" href="./" style="display:none">管理者ダッシュボードを開く</a>
@@ -102,7 +105,7 @@ async function init() {
       const email = await verifyPasswordResetCode(auth, code);
       setText("email-view", email);
       $("reset-area").style.display = "";
-      showMsg("担当大学が正しければ、新しいパスワードを入力してください。");
+      showMsg("担当大学が正しければ、新しいパスワードを入力してください。違う場合は設定せず、管理者へ連絡してください。");
     } catch (e) {
       setText("email-view", getParam("email") || "");
       showMsg(authErrorMessage(e), "err");
