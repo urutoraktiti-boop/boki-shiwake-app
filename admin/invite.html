@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>管理者招待の確認｜簿記2級 仕訳トレーニング</title>
+<style>
+  :root{--primary:#1a5fb4; --primary-dark:#14497f; --bg:#f4f6f9; --card:#fff; --text:#22303d; --sub:#6b7a89; --line:#dbe2ea;}
+  *{box-sizing:border-box;}
+  body{font-family:"Hiragino Sans","Yu Gothic",Meiryo,sans-serif; background:var(--bg); color:var(--text); line-height:1.7; margin:0; padding:18px;}
+  .wrap{max-width:680px; margin:0 auto;}
+  header{background:var(--primary); color:#fff; border-radius:12px; padding:16px 18px; margin-bottom:14px;}
+  h1{font-size:1.15rem; margin:0;}
+  p{margin:8px 0;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:14px;}
+  .label{font-size:.82rem; color:var(--sub); margin-top:10px;}
+  .value{font-size:1.05rem; font-weight:700; color:var(--primary-dark);}
+  .muted{color:var(--sub); font-size:.9rem;}
+  a.button{display:inline-block; text-decoration:none; background:var(--primary); color:#fff; border-radius:8px; padding:10px 16px; font-weight:700; margin-top:12px;}
+  a.button:hover{background:var(--primary-dark);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>管理者招待の確認</h1>
+    <p>簿記2級 仕訳トレーニング｜管理者ダッシュボード</p>
+  </header>
+  <div class="card">
+    <p>パスワード設定が完了したら、以下の内容で管理者ダッシュボードにログインしてください。</p>
+    <div class="label">メールアドレス</div>
+    <div class="value" id="email-view">確認中...</div>
+    <div class="label">権限</div>
+    <div class="value" id="role-view">確認中...</div>
+    <div class="label">担当大学</div>
+    <div class="value" id="univ-view">確認中...</div>
+    <p class="muted" style="margin-top:16px">担当大学が違う場合は、ログインせずにマスター管理者へ連絡してください。</p>
+    <a class="button" href="./">管理者ダッシュボードを開く</a>
+  </div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+const role = params.get("role") === "master" ? "マスター管理者" : "大学別管理者";
+document.getElementById("email-view").innerHTML = esc(params.get("email") || "未指定");
+document.getElementById("role-view").innerHTML = esc(role);
+document.getElementById("univ-view").innerHTML = esc(params.get("univ") || "未指定");
+</script>
+</body>
+</html>
