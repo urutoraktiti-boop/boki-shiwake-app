@@ -128,19 +128,97 @@
   .pick-btn small{display:block; font-size:.66rem; color:var(--sub); margin-top:2px;}
   .pick-btn.sel{border-color:var(--primary); background:#e8eef7;}
   .pick-btn.sel b{color:var(--primary);}
+
+  /* ===== Study Journal UI v3.22 ===== */
+  :root{
+    --primary:#315c4d; --primary-dark:#203e35; --bg:#e9e3d7; --card:#fffdf7;
+    --ok:#39745d; --ng:#a34f42; --text:#202823; --sub:#6f7068; --line:#cec5b4;
+    --paper:#fffdf7; --paper-deep:#f5efe3; --rule:#d8d0c1; --accent:#a7793f;
+  }
+  body{background:var(--bg); color:var(--text); letter-spacing:.01em;}
+  .app{max-width:760px; padding:18px 16px 118px;}
+  .journal-header{
+    display:grid; grid-template-columns:auto 1fr; gap:16px; align-items:end;
+    background:var(--paper); color:var(--text); border:0; border-radius:2px;
+    border-top:1px solid var(--text); border-bottom:4px double var(--text);
+    padding:18px 20px 14px; margin-bottom:18px;
+  }
+  .journal-date{min-width:66px; padding-right:16px; border-right:1px solid var(--line); text-align:center;}
+  .journal-date strong{display:block; font-family:Georgia,"Yu Mincho","Hiragino Mincho ProN",serif; font-size:2.45rem; line-height:1; font-weight:500; color:var(--primary-dark);}
+  .journal-date span{font-family:Georgia,serif; font-size:.68rem; letter-spacing:.16em; color:var(--sub);}
+  .journal-kicker{display:block; font-family:Georgia,serif; font-size:.65rem; letter-spacing:.18em; color:var(--accent); margin-bottom:2px;}
+  .journal-header h1{font-family:"Yu Mincho","Hiragino Mincho ProN",Georgia,serif; font-size:1.35rem; font-weight:600; letter-spacing:.04em;}
+  .journal-header h1 .ver{font-family:"Hiragino Sans","Yu Gothic",sans-serif; font-size:.62rem; color:var(--sub); font-weight:400;}
+  .journal-header p{font-size:.75rem; color:var(--sub); opacity:1; margin-top:3px;}
+  .tabs{background:var(--paper); border:1px solid var(--line); border-radius:2px; padding:4px; gap:4px;}
+  .tab{border:0; border-radius:2px; background:transparent; color:var(--sub); font-family:"Yu Mincho","Hiragino Mincho ProN",serif; letter-spacing:.08em;}
+  .tab.active{background:var(--primary); color:#fffdf7; border-color:var(--primary);}
+  .card{background:var(--paper); border:0; border-radius:2px; padding:20px; margin-bottom:16px; box-shadow:0 1px 0 rgba(32,40,35,.08);}
+  #view-home>.card,#assignment-wrap{background-color:var(--paper)!important; border-left:3px solid var(--primary)!important;}
+  .side-title{font-family:"Yu Mincho","Hiragino Mincho ProN",Georgia,serif; font-size:.98rem; letter-spacing:.06em; text-align:left; color:var(--primary-dark); background:transparent; border:0; border-bottom:1px solid var(--text); border-radius:0; padding:0 0 7px; margin:10px 0 12px;}
+  .journal-label{display:block; font-family:Georgia,serif; font-size:.62rem; letter-spacing:.18em; color:var(--accent); margin-bottom:2px;}
+  .test-grid{grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px;}
+  .test-btn{min-height:78px; color:var(--text); background:transparent; border:1px solid var(--line); border-radius:2px; padding:12px 10px; text-align:left; position:relative;}
+  .test-btn::after{content:"→"; position:absolute; right:10px; bottom:8px; color:var(--accent);}
+  .test-btn b{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:.98rem;}
+  .test-btn small{color:var(--sub); opacity:1;}
+  .test-btn.done{color:var(--primary-dark); background:#edf3ed; border-color:#8ea99d;}
+  .small-btns{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;}
+  .small-btns button,.small-act,button.ghost{color:var(--primary-dark); background:transparent; border:1px solid var(--primary); border-radius:2px;}
+  button.main{background:var(--primary); color:#fffdf7; border-radius:2px; letter-spacing:.04em;}
+  select,input[type=text]{border-radius:2px; border-color:var(--line); background:var(--paper);}
+  .options{grid-template-columns:1fr; gap:0; background:transparent; border:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:0; padding:9px 2px;}
+  .qhead{padding-bottom:10px; border-bottom:1px solid var(--line);}
+  .qnum{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
+  .badge{border-radius:2px; color:var(--primary-dark); background:var(--paper-deep);}
+  .entry-side{border-radius:2px!important; border-color:var(--line)!important;}
+  .sym-box,.row .del,.addrow{border-radius:2px;}
+  .result,.expl{border-radius:2px;}
+  .expl{background:#fbf4df; border-color:#d9c590;}
+  #stopwatch{border-radius:2px; color:var(--primary-dark); background:var(--paper-deep); border-color:var(--line);}
+  .stat-box{border:0; border-top:3px solid var(--primary); border-radius:0; background:transparent; text-align:left; padding:12px 4px;}
+  .stat-box .v{font-family:Georgia,"Yu Mincho",serif; font-weight:500; color:var(--primary-dark);}
+  .bar,.vol-bar{border-radius:0; background:#e4ded2;}
+  .bar i,.vol-bar i{border-radius:0;}
+  .retry-chip{border-radius:2px;}
+  .modal{border-radius:2px; background:var(--paper); border-top:4px double var(--text);}
+  .modal h3{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
+  .pick-btn{border-radius:2px; background:transparent;}
+  .pick-btn.sel{border-color:var(--primary); background:#edf3ed;}
+  .chart .colbar{border-radius:0; background:var(--primary);}
+  #err-banner{border-radius:2px!important;}
+  @media(max-width:679px){
+    .app{max-width:430px; padding:0 0 104px;}
+    .journal-header{margin:0; border-left:0; border-right:0; padding:16px 18px 13px;}
+    #err-banner,#view-home,#view-quiz,#view-stats{margin-left:12px; margin-right:12px;}
+    .tabs{position:fixed; z-index:40; left:50%; bottom:0; transform:translateX(-50%); width:min(100%,430px); margin:0; padding:8px 10px calc(8px + env(safe-area-inset-bottom)); border-left:0; border-right:0; border-bottom:0; box-shadow:0 -4px 18px rgba(32,40,35,.12);}
+    .tab{min-height:46px; display:flex; align-items:center; justify-content:center;}
+    .card{padding:18px 16px; margin-bottom:12px;}
+    .small-btns{grid-template-columns:1fr;}
+    .btns{gap:7px;}
+    .btns button{min-height:44px;}
+    .row{gap:4px;}
+    .sym-box{width:calc(8.5em + 24px);}
+    .stat-grid{gap:7px;}
+    .stat-box .v{font-size:1.28rem;}
+  }
 </style>
 </head>
 <body>
 <div class="app">
-  <header>
-    <h1>簿記2級 仕訳トレーニング <span style="font-size:.7rem; opacity:.7">v3.21配布版</span></h1>
-    <p>仕訳問題対策</p>
+  <header class="journal-header">
+    <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
+    <div>
+      <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
+      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.22配布版</span></h1>
+      <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
+    </div>
   </header>
   <div id="err-banner" style="display:none; background:#fdeeee; color:#d94f4f; border:1px solid #f2c9c9; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:.82rem; word-break:break-all"></div>
 
   <div class="tabs">
-    <div class="tab active" data-view="home" onclick="showView('home')">ホーム</div>
-    <div class="tab" data-view="stats" onclick="showView('stats')">成績</div>
+    <button type="button" class="tab active" data-view="home" onclick="showView('home')">INDEX｜学習</button>
+    <button type="button" class="tab" data-view="stats" onclick="showView('stats')">RECORD｜記録</button>
   </div>
 
   <div id="view-home">
@@ -151,16 +229,16 @@
     </div>
     <div class="card" id="publication-info" style="display:none; border-color:#cfe0f5; background:#f3f8ff; font-size:.82rem; color:var(--primary-dark)">管理者の問題公開設定を反映しています。対象外または公開期間外の問題は表示されません。</div>
     <div class="card" id="assignment-wrap" style="display:none">
-      <div class="side-title" style="margin-top:0">📌 管理者からの課題</div>
+      <div class="side-title" style="margin-top:0"><span class="journal-label">ASSIGNMENT</span>管理者からの課題</div>
       <div id="assignment-btns" class="test-grid"></div>
     </div>
     <div class="card">
-      <div class="side-title" style="margin-top:0">📝 回答テスト（20点満点）</div>
+      <div class="side-title" style="margin-top:0"><span class="journal-label">TODAY'S PRACTICE</span>回答テスト（20点満点）</div>
       <div id="group-btns" class="test-grid"></div>
       <div id="no-groups" class="empty" style="display:none; padding:14px 0">問題セットが読み込まれていません（管理者にご連絡ください）</div>
     </div>
     <div class="card">
-      <div class="side-title" style="margin-top:0">その他の練習</div>
+      <div class="side-title" style="margin-top:0"><span class="journal-label">PRACTICE INDEX</span>その他の練習</div>
       <div class="small-btns">
         <button onclick="startQuiz('all')">▶ 全問</button>
         <button id="btn-retry" onclick="startQuiz('wrong')">↻ 復習</button>
@@ -173,7 +251,7 @@
       <small id="retry-info" style="display:block; color:var(--sub); font-size:.75rem; margin-top:8px"></small>
     </div>
     <div class="card">
-      <div class="side-title" style="margin-top:0">⚙ 設定</div>
+      <div class="side-title" style="margin-top:0"><span class="journal-label">PROFILE &amp; BACKUP</span>設定</div>
       <button class="ghost" style="width:100%; font-size:.9rem" id="data-toggle" onclick="toggleDataSettings(this)">💾 データ保存・引き継ぎ ▼</button>
       <div id="data-body" style="display:none; margin-top:10px">
         <div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:6px">👤 ユーザー情報</div>
@@ -217,6 +295,12 @@ window.addEventListener("error",e=>{
   const b=document.getElementById("err-banner");
   if(b){ b.style.display=""; b.textContent="エラーが発生しました: "+e.message+"（この表示を作者に伝えてください）"; }
 });
+{
+  const now=new Date();
+  const day=document.getElementById("journal-day"), month=document.getElementById("journal-month");
+  if(day) day.textContent=String(now.getDate()).padStart(2,"0");
+  if(month) month.textContent=new Intl.DateTimeFormat("en-US",{month:"short"}).format(now).toUpperCase();
+}
 
 /* ===== 出題内容（論点分野）マスタ ===== */
 const CATEGORIES=[

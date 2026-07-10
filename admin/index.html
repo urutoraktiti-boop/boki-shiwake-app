@@ -114,14 +114,78 @@
   .mk-x{color:var(--ng); font-weight:700;}
   .foot{color:var(--sub); font-size:.78rem; text-align:center; margin-top:18px;}
   a{color:var(--primary);}
+
+  /* ===== Study Journal Admin UI v1.16 ===== */
+  :root{
+    --primary:#315c4d; --primary-dark:#203e35; --bg:#e9e3d7; --card:#fffdf7;
+    --ok:#39745d; --ng:#a34f42; --warn:#9a6b2f; --text:#202823; --sub:#6f7068; --line:#cec5b4;
+    --paper:#fffdf7; --paper-deep:#f5efe3; --accent:#a7793f;
+  }
+  body{background:var(--bg); color:var(--text); padding:22px; letter-spacing:.01em;}
+  .wrap{max-width:1280px;}
+  header{
+    color:var(--text); background:var(--paper); border-radius:2px; border-top:1px solid var(--text); border-bottom:4px double var(--text);
+    padding:18px 22px 15px; margin-bottom:14px;
+  }
+  header h1{font-family:"Yu Mincho","Hiragino Mincho ProN",Georgia,serif; font-size:1.42rem; font-weight:600; letter-spacing:.04em;}
+  header .ver{color:var(--sub); opacity:1;}
+  header p{color:var(--sub); opacity:1;}
+  .admin-kicker{display:block; font-family:Georgia,serif; font-size:.65rem; letter-spacing:.2em; color:var(--accent); margin-bottom:2px;}
+  .journal-admin-nav{position:sticky; top:0; z-index:20; display:flex; gap:4px; flex-wrap:wrap; background:var(--paper); border-bottom:1px solid var(--text); padding:7px 8px; margin-bottom:16px;}
+  .journal-admin-nav a{color:var(--sub); text-decoration:none; font-family:"Yu Mincho","Hiragino Mincho ProN",serif; padding:7px 12px; border-right:1px solid var(--line);}
+  .journal-admin-nav a:hover{color:var(--primary-dark); background:var(--paper-deep);}
+  .card{background:var(--paper); border:1px solid var(--line); border-radius:2px; padding:20px; margin-bottom:16px; box-shadow:none;}
+  button{border-radius:2px; border-color:var(--line); background:transparent; font-weight:600;}
+  button.primary{background:var(--primary); color:#fffdf7; border-color:var(--primary);}
+  button.primary:hover{background:var(--primary-dark);}
+  .sec-title{font-family:"Yu Mincho","Hiragino Mincho ProN",Georgia,serif; font-size:1.08rem; font-weight:600; letter-spacing:.05em; color:var(--primary-dark); border-bottom:1px solid var(--text); padding-bottom:8px;}
+  .sec-title::before{content:"RECORD / "; font-family:Georgia,serif; font-size:.62rem; letter-spacing:.15em; color:var(--accent);}
+  .stat-row{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px;}
+  .stat{min-width:0; background:transparent; border:0; border-top:3px solid var(--primary); border-radius:0; padding:12px 4px;}
+  .stat .num{font-family:Georgia,"Yu Mincho",serif; color:var(--primary-dark); font-weight:500;}
+  .controls{border-bottom:1px solid var(--line); padding-bottom:12px;}
+  .controls select,.controls input,.admin-form input,.admin-form select,.assign-row-form input,.assign-row-form select,.assign-row-form textarea{border-radius:2px; border-color:var(--line); background:var(--paper);}
+  table{font-size:.84rem;}
+  th,td{border-left:0; border-right:0; border-color:var(--line); padding:8px 10px;}
+  th{color:var(--primary-dark); background:var(--paper-deep); border-top:1px solid var(--text); border-bottom:2px solid var(--text);}
+  tbody tr:hover{background:#f8f3e9;}
+  .univ-head{background:var(--paper-deep);}
+  .detail-row td,.student-detail-row td{background:#fbf8f0;}
+  .badge-total,.role-badge,.pub-state{border-radius:2px;}
+  .s-pass{background:#e6efe8; color:#2d644f;}.s-mid{background:#f5ead5; color:#805c25;}.s-fail{background:#f4e1dc; color:#8c4037;}
+  .link-grid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;}
+  .link-card,.admin-list-item,.assign-list-item,.detail-chip,.mini-stat,.q-rate{border-radius:2px; background:transparent;}
+  .admin-preview-btn{border-radius:2px; background:#f4ead5;}
+  .assign-picker,.assign-result-panel{border-radius:2px; background:#fbf8f0;}
+  .assign-group>b{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
+  .assign-q{border-radius:2px; background:var(--paper);}
+  .publication-bulk{border-color:#b9ad94; border-radius:2px; background:#f8f2e6;}
+  .publication-bulk-row{border-color:#ddd2bd;}
+  .publication-bulk-title,.publication-bulk-row>b{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
+  .publication-bulk-buttons button{border-radius:2px; color:var(--primary-dark); border-color:#a99a7e; background:var(--paper);}
+  .publication-bulk-buttons button:hover{background:#eee5d4;}
+  .publication-bulk-buttons button.selected{color:#fffdf7; border-color:var(--primary); background:var(--primary); box-shadow:none;}
+  .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
+  .foot{border-top:1px solid var(--line); padding-top:12px;}
+  #login-view{max-width:680px; margin:28px auto; border-top:4px double var(--text);}
+  #login-view h2{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
+  @media(max-width:760px){
+    body{padding:10px;}
+    header{padding:15px 16px;}
+    .journal-admin-nav{position:static; overflow-x:auto; flex-wrap:nowrap;}
+    .journal-admin-nav a{white-space:nowrap;}
+    .stat-row{grid-template-columns:1fr 1fr;}
+    .card{padding:16px;}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.15</span></h1>
-      <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
+      <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.16</span></h1>
+      <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
   </header>
@@ -149,8 +213,11 @@
 
   <!-- ログイン後 -->
   <div id="main-view" style="display:none">
+    <nav class="journal-admin-nav" aria-label="管理画面内メニュー">
+      <a href="#grade-records">学生記録</a><a href="#publication-records">公開設定</a><a href="#assignment-records">課題管理</a><a href="#university-links">告知リンク</a>
+    </nav>
     <div id="summary" class="stat-row"></div>
-    <div class="card">
+    <div class="card" id="university-links">
       <div class="sec-title">🏫 大学別の告知リンク</div>
       <p class="muted" style="margin-top:0">大学ごとのURLを学生に案内すると、学生側では大学名が固定され、学籍番号だけを入力する形になります。QRコードを作る場合は、このURLを使ってください。</p>
       <div id="univ-link-list" class="link-grid"></div>
@@ -170,7 +237,7 @@
       </div>
       <div id="admin-list"></div>
     </div>
-    <div class="card">
+    <div class="card" id="grade-records">
       <div class="controls">
         <label>大学：
           <select id="univ-filter"><option value="">すべて</option></select>
@@ -191,7 +258,7 @@
     </div>
 
     <!-- 問題の公開設定 -->
-    <div class="card">
+    <div class="card" id="publication-records">
       <div class="sec-title">🔓 問題の公開設定</div>
       <p class="muted" style="margin-top:0">ユーザーに表示する問題、対象、公開開始・終了日時を設定します。大学別管理者は自分の担当大学向けの設定だけを作成・編集できます。</p>
       <button id="publication-new-btn" class="primary">＋ 新しい公開設定を作る</button>
@@ -200,7 +267,7 @@
     </div>
 
     <!-- 課題の作成・管理 -->
-    <div class="card">
+    <div class="card" id="assignment-records">
       <div class="sec-title">📌 課題の作成・管理</div>
       <p class="muted" style="margin-top:0">問題①〜⑨の中から問を選んで「課題」を作り、対象（全員／大学／学籍番号）を決めて公開すると、生徒アプリのホームに自動で表示されます。</p>
       <button id="assign-new-btn" class="primary">＋ 新しい課題を作る</button>
