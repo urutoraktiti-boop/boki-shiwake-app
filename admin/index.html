@@ -74,6 +74,8 @@
   .publication-bulk-buttons{display:flex; flex-wrap:wrap; gap:5px;}
   .publication-bulk-buttons button{padding:6px 10px; font-size:.78rem; color:var(--primary-dark); border-color:#93c5fd; background:#fff;}
   .publication-bulk-buttons button:hover{background:#dbeafe;}
+  .publication-bulk-buttons button.selected{color:#fff; border-color:var(--primary); background:var(--primary); font-weight:700; box-shadow:0 1px 3px rgba(26,95,180,.25);}
+  .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
   .assign-q{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; margin:0 6px 6px 0; font-size:.8rem; background:#fff; cursor:pointer;}
   .assign-q input{margin:0;}
   .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
@@ -118,7 +120,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.14</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.15</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -1081,6 +1083,8 @@ function openPublicationForm(id) {
       </div>
     </div>`;
   }).join("");
+  const mockCommercialAll = META.filter(m => /^2025年度2級直前模試 第[1-6]回・第1問$/.test(m.group)).map(m => m.qid);
+  const mockIndustrialAll = META.filter(m => /^2025年度2級直前模試 第[1-6]回・第4問\(1\)$/.test(m.group)).map(m => m.qid);
   const bulkPicker = `<div class="publication-bulk">
     <div class="publication-bulk-title">まとめて選択</div>
     <div class="publication-bulk-row">
@@ -1088,6 +1092,14 @@ function openPublicationForm(id) {
       <div class="publication-bulk-buttons">
         ${presetButton("legacy-all", "①〜⑨をすべて（49問）", legacyAll)}
         ${legacyButtons}
+      </div>
+    </div>
+    <div class="publication-bulk-row">
+      <b>2025年度2級直前模試 第1回〜第6回</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton("mock-all", "第1回〜第6回をすべて（48問）", [...mockCommercialAll, ...mockIndustrialAll])}
+        ${presetButton("mock-commercial-all", "第1問をすべて（全6回・30問）", mockCommercialAll)}
+        ${presetButton("mock-industrial-all", "第4問(1)をすべて（全6回・18問）", mockIndustrialAll)}
       </div>
     </div>
     ${mockRows}
@@ -1098,7 +1110,7 @@ function openPublicationForm(id) {
   const groups = [...new Set(META.map(m => m.group))].sort((a, b) => a.localeCompare(b, "ja"));
   const picker = groups.map(g => {
     const items = META.filter(m => m.group === g).map(m =>
-      `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
+      `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount(); window.__publicationRefreshBulkButtons && window.__publicationRefreshBulkButtons()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
     ).join("");
     return `<div class="assign-group"><b>${esc(g)}</b>${items}</div>`;
   }).join("");
@@ -1144,17 +1156,30 @@ function openPublicationForm(id) {
   };
   $("publication-save").onclick = savePublication;
   $("publication-cancel").onclick = () => { form.style.display = "none"; form.innerHTML = ""; editingPublicationId = null; };
+  const refreshBulkButtons = () => {
+    form.querySelectorAll("[data-publication-bulk]").forEach(button => {
+      const qids = bulkPresets.get(button.dataset.publicationBulk) || [];
+      const selectedAll = qids.length > 0 && qids.every(qid => form.querySelector(`.assign-picker input[value="${CSS.escape(qid)}"]`)?.checked);
+      button.classList.toggle("selected", selectedAll);
+      button.setAttribute("aria-pressed", String(selectedAll));
+    });
+  };
+  window.__publicationRefreshBulkButtons = refreshBulkButtons;
   form.querySelectorAll("[data-publication-bulk]").forEach(button => button.onclick = () => {
     const qids = new Set(bulkPresets.get(button.dataset.publicationBulk) || []);
-    form.querySelectorAll(".assign-picker input").forEach(input => { if (qids.has(input.value)) input.checked = true; });
+    const selectedAll = qids.size > 0 && [...qids].every(qid => form.querySelector(`.assign-picker input[value="${CSS.escape(qid)}"]`)?.checked);
+    form.querySelectorAll(".assign-picker input").forEach(input => { if (qids.has(input.value)) input.checked = !selectedAll; });
     window.__publicationCount();
+    refreshBulkButtons();
   });
   const clearButton = form.querySelector("[data-publication-clear]");
   if (clearButton) clearButton.onclick = () => {
     form.querySelectorAll(".assign-picker input").forEach(input => { input.checked = false; });
     window.__publicationCount();
+    refreshBulkButtons();
   };
   window.__publicationCount();
+  refreshBulkButtons();
 }
 window.__publicationCount = function() {
   const form = $("publication-form");
