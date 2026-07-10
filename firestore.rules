@@ -35,17 +35,20 @@ service cloud.firestore {
     }
 
     function isReservedDoc(code) {
-      return code in ['assignments-config', 'admin-config'];
+      return code in ['assignments-config', 'publications-config', 'admin-config'];
     }
 
     // ===== 簿記2級 学生の学習記録（同期コードごと1件） =====
     match /boki2_sync/{code} {
       // 学生：同期コードを知っていれば、その1件だけ読み書きできる（従来どおり）
-      // ただし課題定義ドキュメント（assignments-config）は管理者だけ、
+      // ただし課題定義・問題公開設定ドキュメントは管理者だけ、
       // 管理者設定ドキュメント（admin-config）はマスター管理者だけが書き換え可能。
-      allow get: if !isReservedDoc(code) || code == 'assignments-config' || isAdmin();
+      allow get: if !isReservedDoc(code)
+                 || code in ['assignments-config', 'publications-config']
+                 || isAdmin();
       allow create, update: if !isReservedDoc(code)
                             || (code == 'assignments-config' && isAdmin())
+                            || (code == 'publications-config' && isAdmin())
                             || (code == 'admin-config' && isMasterAdmin());
 
       // 管理者だけ「一覧（list）」できる ＝ ダッシュボード用

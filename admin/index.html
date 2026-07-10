@@ -71,6 +71,13 @@
   .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
   .assign-row-form input, .assign-row-form select, .assign-row-form textarea{width:100%; max-width:420px; font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
   .assign-list-item{border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fff; font-size:.84rem;}
+  .inline-check{display:flex!important; align-items:center; gap:8px; max-width:420px; font-weight:600;}
+  .inline-check input{width:auto!important; margin:0;}
+  .pub-state{display:inline-block; border-radius:999px; padding:1px 8px; font-size:.74rem; font-weight:700; margin-left:5px;}
+  .pub-active{background:#e3f5ea; color:#1f7a44;}
+  .pub-scheduled{background:#e8eef7; color:var(--primary);}
+  .pub-draft{background:#eef1f5; color:var(--sub);}
+  .pub-ended{background:#fbe6e6; color:#a83b3b;}
   .link-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-top:10px;}
   .link-card{border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff; font-size:.84rem;}
   .link-url{display:block; color:var(--sub); font-size:.74rem; word-break:break-all; margin:4px 0 8px;}
@@ -103,7 +110,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.11</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.13</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -173,6 +180,15 @@
       </div>
     </div>
 
+    <!-- 問題の公開設定 -->
+    <div class="card">
+      <div class="sec-title">🔓 問題の公開設定</div>
+      <p class="muted" style="margin-top:0">ユーザーに表示する問題、対象、公開開始・終了日時を設定します。大学別管理者は自分の担当大学向けの設定だけを作成・編集できます。</p>
+      <button id="publication-new-btn" class="primary">＋ 新しい公開設定を作る</button>
+      <div id="publication-form" style="display:none"></div>
+      <div id="publication-list" style="margin-top:12px"></div>
+    </div>
+
     <!-- 課題の作成・管理 -->
     <div class="card">
       <div class="sec-title">📌 課題の作成・管理</div>
@@ -194,7 +210,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, deleteDoc, setDoc, getDoc }
+import { getFirestore, collection, getDocs, doc, deleteDoc, setDoc, getDoc, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ===== 設定 ===== */
@@ -226,9 +242,12 @@ let ADMIN_CONFIG = { admins: [] };
 
 /* ===== 課題（管理者が配信する5問セット） ===== */
 const ASSIGN_DOC = "assignments-config";   // boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない）
+const PUBLICATION_DOC = "publications-config"; // 問題の表示対象・公開期間
 const ADMIN_DOC = "admin-config";          // 管理者権限設定ドキュメント
-const META_URL = "../src/問題セット_第1問特集①-⑨.json";  // 問題メタ（group→問→qid→label）の取得元
-const META_SETKEY = "第1問特集①〜⑨";    // qid の接頭辞（生徒アプリの installSet と一致）
+const META_SOURCES = [
+  { url:"../src/問題セット_第1問特集①-⑨.json", fallbackName:"第1問特集①〜⑨" },
+  { url:"../src/問題セット_2025年度2級直前模試_第1回-第6回.json", fallbackName:"2025年度2級直前模試 第1回〜第6回" }
+]; // 公開設定・課題で選べる問題カタログ
 const ADMIN_URL = "https://urutoraktiti-boop.github.io/boki-shiwake-app/admin/";
 /* 大学の選択肢（生徒アプリの UNIVERSITIES と一致。生徒未登録の大学も選べるように固定リストを用意） */
 const UNIVERSITIES = ["学習院大学", "日本大学経済学部", "日本大学商学部", "東洋大学", "駒澤大学", "専修大学"];
@@ -243,6 +262,8 @@ const UNIVERSITY_LINKS = [
 let META = [];          // [{qid, group, label, points}]
 let ASSIGN_DEFS = [];   // 課題定義ドキュメントの assignments 配列
 let editingId = null;   // 編集中の課題ID（新規は null）
+let PUBLICATION_DEFS = [];
+let editingPublicationId = null;
 
 /* ===== 認証 ===== */
 $("login-btn").onclick = async () => {
@@ -426,14 +447,16 @@ async function loadData() {
     const snap = await getDocs(collection(db, SYNC_COLLECTION));
     ROWS = [];
     ASSIGN_DEFS = [];
+    PUBLICATION_DEFS = [];
     const groupSet = new Set();
     snap.forEach(doc => {
       const f = doc.data();
       let data = {};
       try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
       // 課題定義・管理者設定ドキュメント（および万一の予約ID）は学生行に入れない
-      if (doc.id === ASSIGN_DOC || doc.id === ADMIN_DOC || doc.id.startsWith("__")) {
+      if (doc.id === ASSIGN_DOC || doc.id === PUBLICATION_DOC || doc.id === ADMIN_DOC || doc.id.startsWith("__")) {
         if (doc.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
+        if (doc.id === PUBLICATION_DOC) PUBLICATION_DEFS = Array.isArray(data.publications) ? data.publications : [];
         return;
       }
       const tests = Array.isArray(data.tests) ? data.tests : [];
@@ -473,6 +496,7 @@ async function loadData() {
     buildUnivFilter();
     renderUnivLinks();
     render();
+    renderPublicationManage();
     renderAssignManage();
     renderAssignResults();
     $("load-msg").textContent = `${ROWS.length}名 / 最終取得 ${new Date().toLocaleTimeString("ja-JP", { hour:"2-digit", minute:"2-digit" })}`;
@@ -895,18 +919,22 @@ async function deleteRow(r) {
 async function loadProblemMeta() {
   if (META.length) return;
   try {
-    const r = await fetch(META_URL);
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const json = await r.json();
-    const qs = Array.isArray(json.questions) ? json.questions : [];
-    // qid は生徒アプリ installSet と同じ規則： setKey = セット名の空白を _ に置換 → `${setKey}_q{連番}`
-    const setKey = (json.name || META_SETKEY).replace(/\s+/g, "_");
-    META = qs.map((q, i) => ({
-      qid: `${setKey}_q${i + 1}`,
-      group: q.group || "その他",
-      label: q.label || ("問" + (i + 1)),
-      points: q.points || 0
+    const catalogs = await Promise.all(META_SOURCES.map(async source => {
+      const r = await fetch(source.url);
+      if (!r.ok) throw new Error(`${source.url}: HTTP ${r.status}`);
+      const json = await r.json();
+      const qs = Array.isArray(json.questions) ? json.questions : [];
+      const setKey = (json.name || source.fallbackName).replace(/\s+/g, "_");
+      return qs.map((q, i) => ({
+        qid: q.questionId || q.id || `${setKey}_q${i + 1}`,
+        group: q.group || "その他",
+        label: q.label || ("問" + (i + 1)),
+        topic: q.topic || "",
+        points: q.points || 0
+      }));
     }));
+    const seen = new Set();
+    META = catalogs.flat().filter(q => !seen.has(q.qid) && seen.add(q.qid));
   } catch (e) {
     META = [];
     console.warn("問題メタの取得に失敗:", e.message);
@@ -923,6 +951,7 @@ function currentUnivs() {
 function targetLabel(t) {
   t = t || { mode: "all" };
   if (t.mode === "univ") return "大学：" + (t.univ || "?");
+  if (t.mode === "students") return "大学：" + (t.univ || "?") + "／学籍番号：" + (t.sids || []).join("・");
   if (t.mode === "sids") return "学籍番号：" + (t.sids || []).join("・");
   return "全員";
 }
@@ -930,13 +959,238 @@ function matchTarget(r, t) {
   t = t || { mode: "all" };
   if (t.mode === "all") return true;
   if (t.mode === "univ") return r.univ === t.univ;
+  if (t.mode === "students") return r.univ === t.univ && (t.sids || []).map(String).includes(String(r.sid));
   if (t.mode === "sids") return (t.sids || []).map(String).includes(String(r.sid));
   return false;
 }
 function qidLabel(qid) {
   const m = META.find(x => x.qid === qid);
-  return m ? m.label : qid;   // 例：「特集① 問1」
+  return m ? `${m.label}${m.topic ? "｜" + m.topic : ""}` : qid;
 }
+
+/* ===== 問題の公開設定 ===== */
+function publicationState(p, now = Date.now()) {
+  if (p && p.enabled === false) return { key:"draft", label:"下書き" };
+  const from = Number(p && p.publishFrom || 0);
+  const until = Number(p && p.publishUntil || 0);
+  if (from && now < from) return { key:"scheduled", label:"公開予約" };
+  if (until && now >= until) return { key:"ended", label:"公開終了" };
+  return { key:"active", label:"公開中" };
+}
+function dateTimeInputValue(ms) {
+  if (!ms) return "";
+  const d = new Date(Number(ms));
+  if (!isFinite(d.getTime())) return "";
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+function parseDateTimeInput(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return isFinite(ms) ? ms : NaN;
+}
+function displayDateTime(ms) {
+  if (!ms) return "指定なし";
+  return new Date(Number(ms)).toLocaleString("ja-JP", {
+    year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"
+  });
+}
+function publicationPeriodLabel(p) {
+  return `開始：${displayDateTime(p && p.publishFrom)}｜終了：${displayDateTime(p && p.publishUntil)}`;
+}
+function canManagePublication(p) {
+  if (isMaster()) return true;
+  const owner = normalizeEmail(p && p.ownerEmail);
+  const t = (p && p.target) || {};
+  if (owner && owner !== currentUserEmail) return false;
+  return (t.mode === "univ" || t.mode === "students") && canSeeUniv(t.univ);
+}
+function visiblePublications() {
+  return PUBLICATION_DEFS.filter(canManagePublication);
+}
+function renderPublicationManage() {
+  const box = $("publication-list");
+  if (!box) return;
+  const list = visiblePublications().sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+  if (!list.length) {
+    box.innerHTML = `<p class="muted">まだ公開設定はありません。「＋ 新しい公開設定を作る」から作成してください。</p>`;
+    return;
+  }
+  box.innerHTML = list.map(p => {
+    const state = publicationState(p);
+    const owner = p.ownerEmail ? `｜管理者：${esc(p.ownerEmail)}` : "";
+    return `<div class="assign-list-item">
+      <b>${esc(p.title || "問題公開")}</b><span class="pub-state pub-${state.key}">${state.label}</span>
+      <div class="muted" style="margin:4px 0">${esc(targetLabel(p.target))}｜${(p.qids || []).length}問${owner}</div>
+      <div class="muted" style="margin:4px 0">${esc(publicationPeriodLabel(p))}</div>
+      <div class="muted" style="margin:4px 0">${(p.qids || []).map(q => esc(qidLabel(q))).join("／")}</div>
+      <button data-publication-edit="${esc(p.id)}">✏ 編集</button>
+      <button data-publication-del="${esc(p.id)}" style="color:#b91c1c; border-color:#fca5a5; background:#fee2e2">🗑 削除</button>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-publication-edit]").forEach(b => b.onclick = () => openPublicationForm(b.dataset.publicationEdit));
+  box.querySelectorAll("[data-publication-del]").forEach(b => b.onclick = () => deletePublication(b.dataset.publicationDel));
+}
+function openPublicationForm(id) {
+  editingPublicationId = id || null;
+  const p = id ? PUBLICATION_DEFS.find(x => x.id === id) : null;
+  const form = $("publication-form");
+  if (p && !canManagePublication(p)) {
+    form.style.display = "";
+    form.innerHTML = `<p class="err">この公開設定は編集できません。</p>`;
+    return;
+  }
+  if (!META.length) {
+    form.style.display = "";
+    form.innerHTML = `<p class="err">問題カタログを読み込めませんでした。ページを再読み込みしてください。</p>`;
+    return;
+  }
+  const selected = new Set(p ? (p.qids || []) : []);
+  const t = p ? (p.target || { mode:"all" }) : { mode:"all" };
+  const scopedUnivs = currentUnivs();
+  const initialMode = isMaster() ? t.mode : "univ";
+  const initialUniv = isMaster() ? (t.univ || "") : ((t.mode === "univ" && canSeeUniv(t.univ)) ? t.univ : (scopedUnivs[0] || ""));
+  const groups = [...new Set(META.map(m => m.group))].sort((a, b) => a.localeCompare(b, "ja"));
+  const picker = groups.map(g => {
+    const items = META.filter(m => m.group === g).map(m =>
+      `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
+    ).join("");
+    return `<div class="assign-group"><b>${esc(g)}</b>${items}</div>`;
+  }).join("");
+  const univOpts = scopedUnivs.map(u => `<option value="${esc(u)}" ${initialUniv === u ? "selected" : ""}>${esc(u)}</option>`).join("");
+  form.style.display = "";
+  form.innerHTML = `<div class="assign-row-form" style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:10px; background:#f7fafd">
+    <label>設定名（管理者向け）</label>
+    <input id="publication-title" type="text" placeholder="例：学習院大学・第1回公開" value="${esc(p ? (p.title || "") : "")}">
+    <label>対象</label>
+    <select id="publication-mode">
+      ${isMaster() ? `<option value="all" ${initialMode === "all" ? "selected" : ""}>全員</option>` : ""}
+      <option value="univ" ${initialMode === "univ" ? "selected" : ""}>特定の大学</option>
+      <option value="students" ${initialMode === "students" ? "selected" : ""}>特定の大学・学籍番号</option>
+    </select>
+    <div id="publication-univ-wrap" style="display:${initialMode === "univ" || initialMode === "students" ? "" : "none"}">
+      <label>大学を選択</label>
+      <select id="publication-univ"><option value="">（選択してください）</option>${univOpts}</select>
+    </div>
+    <div id="publication-sids-wrap" style="display:${initialMode === "students" ? "" : "none"}">
+      <label>学籍番号（カンマ・改行・スペース区切り）</label>
+      <textarea id="publication-sids" rows="3" placeholder="1001, 1002, 1003">${esc(t.mode === "students" ? (t.sids || []).join(", ") : "")}</textarea>
+    </div>
+    <label>公開期間</label>
+    <input id="publication-from" type="datetime-local" value="${dateTimeInputValue(p && p.publishFrom)}">
+    <span class="muted">から（空欄なら保存後すぐ）</span>
+    <input id="publication-until" type="datetime-local" value="${dateTimeInputValue(p && p.publishUntil)}" style="margin-top:6px">
+    <span class="muted">まで（空欄なら終了なし）</span>
+    <label class="inline-check"><input id="publication-enabled" type="checkbox" ${p && p.enabled !== false ? "checked" : ""}>この設定を有効にする</label>
+    <label>公開する問　<span id="publication-count" class="muted"></span></label>
+    <div class="assign-picker">${picker}</div>
+    <div style="margin-top:10px">
+      <button id="publication-save" class="primary">保存</button>
+      <button id="publication-cancel">キャンセル</button>
+      <span id="publication-msg" class="muted"></span>
+    </div>
+  </div>`;
+  $("publication-mode").onchange = () => {
+    const mode = $("publication-mode").value;
+    $("publication-univ-wrap").style.display = mode === "univ" || mode === "students" ? "" : "none";
+    $("publication-sids-wrap").style.display = mode === "students" ? "" : "none";
+  };
+  $("publication-save").onclick = savePublication;
+  $("publication-cancel").onclick = () => { form.style.display = "none"; form.innerHTML = ""; editingPublicationId = null; };
+  window.__publicationCount();
+}
+window.__publicationCount = function() {
+  const form = $("publication-form");
+  if (!form) return;
+  const checked = [...form.querySelectorAll(".assign-picker input:checked")];
+  const points = checked.reduce((sum, input) => sum + (META.find(m => m.qid === input.value)?.points || 0), 0);
+  const el = $("publication-count");
+  if (el) el.textContent = `選択 ${checked.length}問・${points}点`;
+};
+async function savePublication() {
+  const form = $("publication-form");
+  const title = $("publication-title").value.trim();
+  const mode = $("publication-mode").value;
+  const qids = [...form.querySelectorAll(".assign-picker input:checked")].map(c => c.value);
+  const publishFrom = parseDateTimeInput($("publication-from").value);
+  const publishUntil = parseDateTimeInput($("publication-until").value);
+  const enabled = $("publication-enabled").checked;
+  if (!title) { $("publication-msg").innerHTML = `<span class="err">設定名を入力してください。</span>`; return; }
+  if (!qids.length) { $("publication-msg").innerHTML = `<span class="err">問題を1つ以上選んでください。</span>`; return; }
+  if (Number.isNaN(publishFrom) || Number.isNaN(publishUntil)) { $("publication-msg").innerHTML = `<span class="err">公開日時を確認してください。</span>`; return; }
+  if (publishFrom && publishUntil && publishUntil <= publishFrom) { $("publication-msg").innerHTML = `<span class="err">終了日時は開始日時より後にしてください。</span>`; return; }
+  let target = { mode:"all" };
+  if (mode === "all" && !isMaster()) { $("publication-msg").innerHTML = `<span class="err">全員向け公開はマスター管理者のみ設定できます。</span>`; return; }
+  if (mode === "univ") {
+    const univ = $("publication-univ").value;
+    if (!univ) { $("publication-msg").innerHTML = `<span class="err">大学を選択してください。</span>`; return; }
+    if (!canSeeUniv(univ)) { $("publication-msg").innerHTML = `<span class="err">担当外の大学は選択できません。</span>`; return; }
+    target = { mode:"univ", univ };
+  } else if (mode === "students") {
+    const univ = $("publication-univ").value;
+    if (!univ) { $("publication-msg").innerHTML = `<span class="err">大学を選択してください。</span>`; return; }
+    if (!canSeeUniv(univ)) { $("publication-msg").innerHTML = `<span class="err">担当外の大学は選択できません。</span>`; return; }
+    const sids = $("publication-sids").value.split(/[\s,、]+/).map(s => s.trim()).filter(Boolean);
+    if (!sids.length) { $("publication-msg").innerHTML = `<span class="err">学籍番号を入力してください。</span>`; return; }
+    target = { mode:"students", univ, sids };
+  }
+  $("publication-msg").textContent = "保存中…";
+  try {
+    let saved = [];
+    const ref = doc(db, SYNC_COLLECTION, PUBLICATION_DOC);
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      let arr = [];
+      if (snap.exists()) { try { arr = JSON.parse(snap.data().data).publications || []; } catch (e) { arr = []; } }
+      const id = editingPublicationId || ("p" + Date.now());
+      const existing = arr.find(x => x.id === id);
+      if (existing && !canManagePublication(existing)) throw new Error("この公開設定を編集する権限がありません。");
+      const now = Date.now();
+      const rec = {
+        id, title, target, qids, enabled, publishFrom, publishUntil,
+        ownerEmail: existing && existing.ownerEmail ? normalizeEmail(existing.ownerEmail) : currentUserEmail,
+        createdAt: existing ? existing.createdAt : now,
+        updatedAt: now
+      };
+      if (existing) Object.assign(existing, rec); else arr.push(rec);
+      transaction.set(ref, { data:JSON.stringify({ publications:arr, updatedAt:now }), updatedAt:now, updatedBy:currentUserEmail });
+      saved = arr;
+    });
+    PUBLICATION_DEFS = saved;
+    editingPublicationId = null;
+    form.style.display = "none"; form.innerHTML = "";
+    renderPublicationManage();
+    const state = publicationState({ enabled, publishFrom, publishUntil });
+    alert(state.key === "active" ? "問題を公開しました。" : state.key === "scheduled" ? "公開日時を予約しました。" : "公開設定を保存しました。");
+  } catch (e) {
+    $("publication-msg").innerHTML = `<span class="err">保存に失敗しました：${esc(e.code || e.message)}</span>`;
+  }
+}
+async function deletePublication(id) {
+  const p = PUBLICATION_DEFS.find(x => x.id === id);
+  if (!p || !canManagePublication(p)) { alert("この公開設定は削除できません。"); return; }
+  if (!confirm(`公開設定「${p.title || ""}」を削除します。よろしいですか？`)) return;
+  try {
+    let saved = [];
+    const ref = doc(db, SYNC_COLLECTION, PUBLICATION_DOC);
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      let arr = [];
+      if (snap.exists()) { try { arr = JSON.parse(snap.data().data).publications || []; } catch (e) { arr = []; } }
+      const current = arr.find(x => x.id === id);
+      if (current && !canManagePublication(current)) throw new Error("この公開設定を削除する権限がありません。");
+      arr = arr.filter(x => x.id !== id);
+      const now = Date.now();
+      transaction.set(ref, { data:JSON.stringify({ publications:arr, updatedAt:now }), updatedAt:now, updatedBy:currentUserEmail });
+      saved = arr;
+    });
+    PUBLICATION_DEFS = saved;
+    renderPublicationManage();
+  } catch (e) {
+    alert("削除に失敗しました：" + (e.code || e.message));
+  }
+}
+
 function canManageAssignment(a) {
   if (isMaster()) return true;
   const t = (a && a.target) || {};
@@ -975,7 +1229,7 @@ function openAssignForm(id) {
   const form = $("assign-form");
   if (!META.length) {
     form.style.display = "";
-    form.innerHTML = `<p class="err">問題データ（${esc(META_URL)}）を読み込めませんでした。ページを再読み込みしてください。</p>`;
+    form.innerHTML = `<p class="err">問題カタログを読み込めませんでした。ページを再読み込みしてください。</p>`;
     return;
   }
   const selected = new Set(a ? (a.qids || []) : []);
@@ -1237,6 +1491,7 @@ $("reload-btn").onclick = loadData;
 $("univ-filter").onchange = render;
 $("search-box").oninput = render;
 $("assign-new-btn").onclick = () => openAssignForm(null);
+$("publication-new-btn").onclick = () => openPublicationForm(null);
 $("admin-add-btn").onclick = upsertAdmin;
 </script>
 </body>

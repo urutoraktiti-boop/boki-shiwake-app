@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "reviewedQuestionCount": 48,
+  "figuresByQuestionId": {
+    "2025-mock-r1-industrial-q2": [
+      {
+        "src": "assets/explanations/2025-mock/r1/2025-mock-r1-industrial-q2-figure-1.png",
+        "mimeType": "image/png",
+        "alt": "当月支給総額から月初・月末未払額を調整し、予定消費賃率による労務費との差額70,000円を示す計算図",
+        "caption": "賃率差異70,000円（貸方差異）の計算関係",
+        "sourcePage": 22,
+        "renderDpi": 170,
+        "cropBox": [92, 284, 1203, 638],
+        "width": 1111,
+        "height": 354,
+        "sha256": "d37c8ca3e7f7bf98f1c82adfe6a5be0a54752aea063f20290a0c9391d42260b2",
+        "reviewStatus": "reviewed"
+      }
+    ],
+    "2025-mock-r2-industrial-q2": [
+      {
+        "src": "assets/explanations/2025-mock/r2/2025-mock-r2-industrial-q2-figure-1.png",
+        "mimeType": "image/png",
+        "alt": "固定予算の製造間接費差異を予算差異16,000円と操業度差異24,000円に分解する差異分析図",
+        "caption": "製造間接費差異の原因別分析（固定予算）",
+        "sourcePage": 21,
+        "renderDpi": 170,
+        "cropBox": [235, 500, 1315, 985],
+        "width": 1080,
+        "height": 485,
+        "sha256": "be5b40115e5f337e7386bb2940f3acbd62b0d13b92c6983e247b6398263033c2",
+        "reviewStatus": "reviewed"
+      }
+    ],
+    "2025-mock-r5-industrial-q2": [
+      {
+        "src": "assets/explanations/2025-mock/r5/2025-mock-r5-industrial-q2-figure-1.png",
+        "mimeType": "image/png",
+        "alt": "公式法変動予算における予算差異と操業度差異の原因別分析図",
+        "caption": "実際発生額2,450,000円、実際操業度の予算額2,440,400円、予定配賦額2,430,400円の関係（予算差異9,600円・操業度差異10,000円はいずれも借方差異）",
+        "sourcePage": 22,
+        "renderDpi": 170,
+        "cropBox": [125, 820, 1320, 1500],
+        "width": 1195,
+        "height": 680,
+        "sha256": "31fe873655833c4a337a91630d1f954b95242a8d04e3e9aab13172b3d9e8c673",
+        "reviewStatus": "reviewed"
+      }
+    ]
+  }
+}

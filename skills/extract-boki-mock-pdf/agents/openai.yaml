@@ -1,0 +1,4 @@
+interface:
+  display_name: "簿記模試PDF 8問取込"
+  short_description: "2級模試PDFの指定8問を文章と図解画像で安全に下書き化する"
+  default_prompt: "$extract-boki-mock-pdf を使って、2級直前模試PDFの指定8問を文章＋必要図解の下書きJSONにしてください。"
