@@ -112,6 +112,37 @@
   .student-detail-row td{background:#fff; text-align:left; white-space:normal;}
   .mk-o{color:var(--ok); font-weight:700;}
   .mk-x{color:var(--ng); font-weight:700;}
+  .result-section-toggle{width:100%; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; text-align:left;}
+  .ranking-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; margin:10px 0 14px;}
+  .ranking-card{border:1px solid var(--line); padding:10px; background:var(--card);}
+  .ranking-card h4{margin:0 0 8px; color:var(--primary-dark);}
+  .ranking-list{list-style:none; padding:0; margin:0; counter-reset:rank;}
+  .ranking-list li{counter-increment:rank; display:grid; grid-template-columns:2em minmax(0,1fr) auto; gap:7px; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); font-size:.8rem;}
+  .ranking-list li:last-child{border-bottom:0;}
+  .ranking-list li::before{content:counter(rank); font-family:Georgia,serif; color:var(--accent); text-align:center;}
+  .ranking-value{text-align:right; white-space:nowrap; font-weight:700; color:var(--primary-dark);}
+  .assignment-slide-overlay{position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:14px; background:rgba(24,31,27,.9);}
+  .assignment-slide-shell{width:min(1200px,96vw);}
+  .assignment-slide{display:none; aspect-ratio:16/9; overflow:hidden; background:var(--paper); color:var(--text); border-top:6px double var(--text); padding:4.5% 5%;}
+  .assignment-slide.active{display:flex; flex-direction:column;}
+  .slide-kicker{font-family:Georgia,serif; letter-spacing:.18em; color:var(--accent); font-size:.72rem;}
+  .assignment-slide h2{font-family:"Yu Mincho","Hiragino Mincho ProN",Georgia,serif; font-size:clamp(1.4rem,2.8vw,2.5rem); margin:5px 0 12px;}
+  .slide-metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:12px 0 18px;}
+  .slide-metric{border-top:3px solid var(--primary); padding-top:8px;}
+  .slide-metric strong{display:block; font-family:Georgia,"Yu Mincho",serif; font-size:clamp(1.25rem,2.6vw,2.25rem); color:var(--primary-dark);}
+  .slide-review{margin:auto 0; padding:16px 18px; border-left:5px solid var(--primary); background:var(--paper-deep); font-size:clamp(.85rem,1.45vw,1.2rem);}
+  .slide-q-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; margin-top:5px;}
+  .slide-q-row{display:grid; grid-template-columns:minmax(0,1fr) 3fr auto; gap:10px; align-items:center; font-size:clamp(.7rem,1.15vw,.95rem);}
+  .slide-q-bar{height:12px; background:#e4ded2; overflow:hidden;}
+  .slide-q-bar i{display:block; height:100%; background:var(--primary);}
+  .slide-ranking-grid{display:grid; grid-template-columns:1fr 1fr; gap:30px; min-height:0;}
+  .slide-ranking{min-height:0;}
+  .slide-ranking ol{margin:6px 0 0; padding-left:2em; columns:1;}
+  .slide-ranking li{padding:3px 0; border-bottom:1px solid var(--line); font-size:clamp(.65rem,1vw,.88rem);}
+  .slide-awards{display:flex; gap:12px; flex-wrap:wrap; margin-top:auto; padding-top:10px; border-top:1px solid var(--text);}
+  .slide-award{flex:1; min-width:180px;}
+  .assignment-slide-controls{display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap; color:#fff;}
+  .assignment-slide-controls button{background:#fffdf7; color:#203e35;}
   .foot{color:var(--sub); font-size:.78rem; text-align:center; margin-top:18px;}
   a{color:var(--primary);}
 
@@ -166,6 +197,7 @@
   .publication-bulk-buttons button:hover{background:#eee5d4;}
   .publication-bulk-buttons button.selected{color:#fffdf7; border-color:var(--primary); background:var(--primary); box-shadow:none;}
   .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
+  .ranking-card{border-radius:2px; background:transparent;}
   .foot{border-top:1px solid var(--line); padding-top:12px;}
   #login-view{max-width:680px; margin:28px auto; border-top:4px double var(--text);}
   #login-view h2{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
@@ -176,6 +208,8 @@
     .journal-admin-nav a{white-space:nowrap;}
     .stat-row{grid-template-columns:1fr 1fr;}
     .card{padding:16px;}
+    .assignment-slide-overlay{justify-content:flex-start; overflow:auto;}
+    .assignment-slide-shell{min-width:760px;}
   }
 </style>
 </head>
@@ -184,7 +218,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.16</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.17</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -314,6 +348,8 @@ let sortKey = "univ";
 let sortAsc = true;
 let OPEN_UNIVS = new Set();
 let openAssignResultId = null;
+let assignStudentListOpen = false;
+let assignmentSlideIndex = 0;
 let currentUserEmail = "";
 let ADMIN_CONFIG = { admins: [] };
 
@@ -543,10 +579,13 @@ async function loadData() {
       tests.forEach(t => {
         if (!t) return;
         if (t.assignmentId) {   // 課題の結果：メイン表とは別に集約
-          const a = assignBest[t.assignmentId] || { score: -1, max: t.max || 0, attempts: 0, last: null, detail: null, timeMs: null };
+          const a = assignBest[t.assignmentId] || { score: -1, max: t.max || 0, attempts: 0, last: null, detail: null, timeMs: null, runs: [] };
           a.attempts++;
           a.last = t.date || a.last;
-          if ((t.score ?? 0) > a.score) { a.score = t.score; a.max = t.max || a.max; a.detail = t.detail || null; a.timeMs = t.timeMs ?? null; }
+          a.runs.push({ score:Number(t.score || 0), max:Number(t.max || a.max || 0), timeMs:t.timeMs ?? null, date:t.date || "", detail:t.detail || null });
+          const score = Number(t.score || 0);
+          const fasterTie = score === a.score && t.timeMs != null && (a.timeMs == null || t.timeMs < a.timeMs);
+          if (score > a.score || fasterTie) { a.score = score; a.max = t.max || a.max; a.detail = t.detail || null; a.timeMs = t.timeMs ?? null; }
           assignBest[t.assignmentId] = a;
           return;
         }
@@ -1516,38 +1555,81 @@ function fmtDur(ms) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function toggleAssignResult(id) {
+  if (openAssignResultId !== id) assignStudentListOpen = false;
   openAssignResultId = openAssignResultId === id ? null : id;
   renderAssignResults();
 }
 
-/* 課題の結果（全体サマリー → 学生別クリック詳細） */
+function maskStudentId(sid) {
+  const s = String(sid || "");
+  if (!s || s === "（未登録）") return "匿名";
+  const tail = s.slice(-4);
+  return "••••" + tail;
+}
+function assignmentAnalytics(a, sourceRows = ROWS) {
+  const targeted = sourceRows.filter(r => matchTarget(r, a.target));
+  const entries = targeted.map(r => ({ r, ab:r.assignBest && r.assignBest[a.id] }))
+    .filter(x => x.ab && x.ab.score >= 0);
+  const qids = a.qids || [];
+  const max = entries.find(x => x.ab.max)?.ab.max || qids.reduce((s, q) => s + (META.find(m => m.qid === q)?.points || 0), 0);
+  const avgScore = entries.length ? entries.reduce((s, x) => s + x.ab.score, 0) / entries.length : 0;
+  const timed = entries.map(x => x.ab.timeMs).filter(v => v != null);
+  const avgTime = timed.length ? timed.reduce((s, v) => s + v, 0) / timed.length : null;
+  const submitRate = targeted.length ? Math.round(entries.length / targeted.length * 100) : 0;
+  const qStats = qids.map(qid => {
+    let answered = 0, ok = 0;
+    entries.forEach(({ab}) => {
+      const d = (ab.detail || []).find(x => x.qid === qid);
+      if (!d) return;
+      answered++;
+      if (d.correct) ok++;
+    });
+    return { qid, label:qidLabel(qid), answered, ok, rate:answered ? Math.round(ok / answered * 100) : 0 };
+  });
+  const byScore = [...entries].sort((x, y) =>
+    (y.ab.score - x.ab.score) || ((x.ab.timeMs ?? Infinity) - (y.ab.timeMs ?? Infinity)) || x.r.sid.localeCompare(y.r.sid, "ja")
+  ).slice(0, 10);
+  const byAttempts = [...entries].sort((x, y) =>
+    (y.ab.attempts - x.ab.attempts) || (y.ab.score - x.ab.score) || ((x.ab.timeMs ?? Infinity) - (y.ab.timeMs ?? Infinity))
+  ).slice(0, 10);
+  const bySpeed = entries.filter(x => x.ab.timeMs != null && x.ab.max > 0 && x.ab.score / x.ab.max >= .7)
+    .sort((x, y) => (x.ab.timeMs - y.ab.timeMs) || (y.ab.score - x.ab.score)).slice(0, 10);
+  const byImprovement = entries.map(x => {
+    const runs = x.ab.runs || [];
+    const improve = runs.length >= 2 ? Number(runs[runs.length - 1].score || 0) - Number(runs[0].score || 0) : 0;
+    return { ...x, improve };
+  }).filter(x => x.improve > 0).sort((x, y) => (y.improve - x.improve) || (y.ab.attempts - x.ab.attempts)).slice(0, 10);
+  const answeredStats = qStats.filter(q => q.answered > 0);
+  const easiest = [...answeredStats].sort((a, b) => b.rate - a.rate)[0];
+  const hardest = [...answeredStats].sort((a, b) => a.rate - b.rate)[0];
+  const avgPct = max ? Math.round(avgScore / max * 100) : 0;
+  let review = entries.length
+    ? `提出率は${submitRate}%、平均正答率は${avgPct}%でした。`
+    : "提出者がまだいないため、総評は提出後に表示されます。";
+  if (entries.length && easiest) review += ` 最も正答率が高かったのは「${easiest.label}」（${easiest.rate}%）です。`;
+  if (entries.length && hardest && hardest.qid !== easiest?.qid) review += ` 「${hardest.label}」（${hardest.rate}%）は、次回の復習テーマとして重点的に扱うと効果的です。`;
+  return { targeted, entries, qids, max, avgScore, avgTime, submitRate, qStats, byScore, byAttempts, bySpeed, byImprovement, review };
+}
+window.__assignmentAnalytics = assignmentAnalytics;
+function assignmentRankList(items, value, masked = false) {
+  if (!items.length) return `<p class="muted">該当する記録がありません。</p>`;
+  return `<ol class="ranking-list">${items.map(x => `<li><span>${esc(masked ? maskStudentId(x.r.sid) : x.r.sid)}<br><span class="muted">${esc(x.r.univ)}</span></span><span class="ranking-value">${value(x)}</span></li>`).join("")}</ol>`;
+}
+
+/* 課題の結果（全体サマリー → 問題別 → ランキング → 学生別） */
 function renderAssignResults() {
   const box = $("assign-results");
   if (!box) return;
   if (!openAssignResultId) { box.style.display = "none"; box.innerHTML = ""; return; }
   const a = ASSIGN_DEFS.find(x => x.id === openAssignResultId);
   if (!a) { box.style.display = "none"; box.innerHTML = ""; return; }
-  const targeted = ROWS.filter(r => matchTarget(r, a.target));
-  const submitted = targeted.filter(r => r.assignBest && r.assignBest[a.id] && r.assignBest[a.id].score >= 0);
-  const qids = a.qids || [];
-  const max = submitted.find(r => r.assignBest[a.id].max)?.assignBest[a.id].max || qids.reduce((s, q) => s + (META.find(m => m.qid === q)?.points || 0), 0);
-  const avgScore = submitted.length ? submitted.reduce((s, r) => s + r.assignBest[a.id].score, 0) / submitted.length : 0;
-  const timed = submitted.map(r => r.assignBest[a.id].timeMs).filter(v => v != null);
-  const avgTime = timed.length ? timed.reduce((s, v) => s + v, 0) / timed.length : null;
-  const submitRate = targeted.length ? Math.round(submitted.length / targeted.length * 100) : 0;
-  const qRates = qids.map(qid => {
-    let answered = 0, ok = 0;
-    submitted.forEach(r => {
-      const d = (r.assignBest[a.id].detail || []).find(x => x.qid === qid);
-      if (!d) return;
-      answered++;
-      if (d.correct) ok++;
-    });
-    const rate = answered ? Math.round(ok / answered * 100) : 0;
+  const an = assignmentAnalytics(a);
+  const { targeted, entries, qids, max, avgScore, avgTime, submitRate, qStats } = an;
+  const qRates = qStats.map(q => {
     return `<div class="q-rate">
-      <b>${esc(qidLabel(qid))}</b>
-      <div class="muted">${ok}/${answered}名 正解（${rate}%）</div>
-      <div class="bar"><i style="width:${rate}%"></i></div>
+      <b>${esc(q.label)}</b>
+      <div class="muted">${q.ok}/${q.answered}名 正解（${q.rate}%）</div>
+      <div class="bar"><i style="width:${q.rate}%"></i></div>
     </div>`;
   }).join("");
   const rows = targeted.length ? targeted.map(r => {
@@ -1567,26 +1649,105 @@ function renderAssignResults() {
   box.innerHTML = `<div class="assign-result-panel">
     <div class="assign-result-head">
       <div><b>📊 ${esc(a.title || "課題")} の成績結果</b><br><span class="muted">対象：${esc(targetLabel(a.target))}</span></div>
-      <button onclick="window.__closeAssignResult()">閉じる</button>
+      <div><button class="primary" onclick="window.__openAssignmentSlides()">16:9 共有スライド（3枚）</button> <button onclick="window.__closeAssignResult()">閉じる</button></div>
     </div>
     <div class="mini-stat-row">
-      <div class="mini-stat"><div class="num">${submitted.length}/${targeted.length}名</div><div class="lbl">提出人数</div></div>
+      <div class="mini-stat"><div class="num">${entries.length}/${targeted.length}名</div><div class="lbl">提出人数</div></div>
       <div class="mini-stat"><div class="num">${submitRate}%</div><div class="lbl">提出率</div></div>
-      <div class="mini-stat"><div class="num">${submitted.length ? avgScore.toFixed(1) : "–"}${max ? `/${max}` : ""}</div><div class="lbl">平均点</div></div>
+      <div class="mini-stat"><div class="num">${entries.length ? avgScore.toFixed(1) : "–"}${max ? `/${max}` : ""}</div><div class="lbl">平均点</div></div>
       <div class="mini-stat"><div class="num">${fmtDur(avgTime)}</div><div class="lbl">平均所要時間</div></div>
     </div>
+    <div class="sec-title" style="margin-top:12px">全体の総評</div>
+    <p style="padding:10px 12px; border-left:4px solid var(--primary); background:var(--paper-deep)">${esc(an.review)}</p>
     <div class="sec-title" style="margin-top:12px">問題別の正答率</div>
     <div class="q-rate-grid">${qRates || '<span class="muted">問題が選択されていません。</span>'}</div>
-    <div class="sec-title" style="margin-top:12px">学生別の結果</div>
-    <div class="tbl-scroll"><table><thead><tr><th class="name-col">大学 / 学籍番号</th><th>得点</th><th>所要時間</th><th>挑戦</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="sec-title" style="margin-top:12px">ランキング</div>
+    <div class="ranking-grid">
+      <div class="ranking-card"><h4>得点ランキング TOP10</h4>${assignmentRankList(an.byScore, x => `${x.ab.score}/${x.ab.max}点｜${fmtDur(x.ab.timeMs)}`)}</div>
+      <div class="ranking-card"><h4>挑戦回数ランキング TOP10</h4>${assignmentRankList(an.byAttempts, x => `${x.ab.attempts}回｜最高${x.ab.score}点`)}</div>
+      <div class="ranking-card"><h4>スピードマスター TOP10</h4><p class="muted">得点率70%以上の学生を対象</p>${assignmentRankList(an.bySpeed, x => `${fmtDur(x.ab.timeMs)}｜${x.ab.score}点`)}</div>
+      <div class="ranking-card"><h4>伸び幅ランキング TOP10</h4><p class="muted">初回から最新挑戦までの得点上昇</p>${assignmentRankList(an.byImprovement, x => `+${x.improve}点｜${x.ab.attempts}回`)}</div>
+    </div>
+    <button class="result-section-toggle" onclick="window.__toggleAssignStudents()"><span>学生別の結果（${targeted.length}名）</span><span>${assignStudentListOpen ? "閉じる ▲" : "表示する ▼"}</span></button>
+    <div id="assign-student-results" style="display:${assignStudentListOpen ? "" : "none"}; margin-top:8px"><div class="tbl-scroll"><table><thead><tr><th class="name-col">大学 / 学籍番号</th><th>得点</th><th>所要時間</th><th>挑戦</th></tr></thead><tbody>${rows}</tbody></table></div></div>
   </div>`;
-  box.querySelectorAll("[data-assign-student]").forEach(tr => {
+  if (assignStudentListOpen) box.querySelectorAll("[data-assign-student]").forEach(tr => {
     tr.onclick = () => toggleAssignStudentDetail(tr, targeted.find(r => r.code === tr.dataset.assignStudent), a);
   });
 }
 
+window.__toggleAssignStudents = function() {
+  assignStudentListOpen = !assignStudentListOpen;
+  renderAssignResults();
+};
+window.__assignmentStudentListIsOpen = () => assignStudentListOpen;
+
+function slideRankRows(items, value) {
+  if (!items.length) return `<p class="muted">該当する記録がありません。</p>`;
+  return `<ol>${items.map(x => `<li>${esc(maskStudentId(x.r.sid))}　${value(x)}</li>`).join("")}</ol>`;
+}
+window.__openAssignmentSlides = function(previewAssignment = null, previewRows = null) {
+  const a = previewAssignment || ASSIGN_DEFS.find(x => x.id === openAssignResultId);
+  if (!a) return;
+  const an = assignmentAnalytics(a, previewRows || ROWS);
+  document.getElementById("assignment-slide-overlay")?.remove();
+  assignmentSlideIndex = 0;
+  const qRows = an.qStats.map(q => `<div class="slide-q-row"><span>${esc(q.label)}</span><span class="slide-q-bar"><i style="width:${q.rate}%"></i></span><b>${q.rate}%</b></div>`).join("");
+  const speedWinner = an.bySpeed[0];
+  const improveWinner = an.byImprovement[0];
+  document.body.insertAdjacentHTML("beforeend", `<div id="assignment-slide-overlay" class="assignment-slide-overlay">
+    <div class="assignment-slide-shell">
+      <section class="assignment-slide active" data-slide="0">
+        <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT 01</span>
+        <h2>${esc(a.title || "課題")}｜全体結果</h2>
+        <p>${esc(targetLabel(a.target))}</p>
+        <div class="slide-metrics">
+          <div class="slide-metric"><strong>${an.entries.length}/${an.targeted.length}</strong><span>提出人数</span></div>
+          <div class="slide-metric"><strong>${an.submitRate}%</strong><span>提出率</span></div>
+          <div class="slide-metric"><strong>${an.entries.length ? an.avgScore.toFixed(1) : "–"}${an.max ? `/${an.max}` : ""}</strong><span>平均点</span></div>
+          <div class="slide-metric"><strong>${fmtDur(an.avgTime)}</strong><span>平均所要時間</span></div>
+        </div>
+        <div class="slide-review"><b>総評</b><br>${esc(an.review)}</div>
+      </section>
+      <section class="assignment-slide" data-slide="1">
+        <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT 02</span>
+        <h2>問題別の正答率</h2>
+        <p class="muted">正答率の低い問題は、次回の授業・復習課題で重点的に扱います。</p>
+        <div class="slide-q-grid">${qRows || '<p class="muted">問題データがありません。</p>'}</div>
+      </section>
+      <section class="assignment-slide" data-slide="2">
+        <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT 03</span>
+        <h2>今回のランキング</h2>
+        <div class="slide-ranking-grid">
+          <div class="slide-ranking"><h3>得点ランキング TOP10</h3>${slideRankRows(an.byScore, x => `${x.ab.score}/${x.ab.max}点｜${fmtDur(x.ab.timeMs)}`)}</div>
+          <div class="slide-ranking"><h3>挑戦回数ランキング TOP10</h3>${slideRankRows(an.byAttempts, x => `${x.ab.attempts}回｜最高${x.ab.score}点`)}</div>
+        </div>
+        <div class="slide-awards">
+          <div class="slide-award"><span class="slide-kicker">SPEED MASTER</span><br><b>${speedWinner ? `${esc(maskStudentId(speedWinner.r.sid))}｜${fmtDur(speedWinner.ab.timeMs)}（${speedWinner.ab.score}点）` : "該当者なし"}</b></div>
+          <div class="slide-award"><span class="slide-kicker">MOST IMPROVED</span><br><b>${improveWinner ? `${esc(maskStudentId(improveWinner.r.sid))}｜+${improveWinner.improve}点` : "該当者なし"}</b></div>
+        </div>
+      </section>
+    </div>
+    <div class="assignment-slide-controls"><button onclick="window.__moveAssignmentSlide(-1)">← 前へ</button><b id="assignment-slide-counter">1 / 3</b><button onclick="window.__moveAssignmentSlide(1)">次へ →</button><button onclick="window.__fullscreenAssignmentSlides()">全画面</button><button onclick="window.__closeAssignmentSlides()">閉じる</button></div>
+  </div>`);
+};
+window.__moveAssignmentSlide = function(delta) {
+  assignmentSlideIndex = Math.max(0, Math.min(2, assignmentSlideIndex + delta));
+  document.querySelectorAll(".assignment-slide").forEach((slide, i) => slide.classList.toggle("active", i === assignmentSlideIndex));
+  const counter = document.getElementById("assignment-slide-counter");
+  if (counter) counter.textContent = `${assignmentSlideIndex + 1} / 3`;
+};
+window.__fullscreenAssignmentSlides = function() {
+  const overlay = document.getElementById("assignment-slide-overlay");
+  if (overlay?.requestFullscreen) overlay.requestFullscreen();
+};
+window.__closeAssignmentSlides = function() {
+  document.getElementById("assignment-slide-overlay")?.remove();
+};
+
 window.__closeAssignResult = function() {
   openAssignResultId = null;
+  assignStudentListOpen = false;
   renderAssignResults();
 };
 function toggleAssignStudentDetail(tr, r, a) {
