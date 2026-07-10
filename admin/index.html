@@ -66,6 +66,14 @@
   .assign-picker{border:1px solid var(--line); border-radius:10px; padding:10px; margin:10px 0; max-height:320px; overflow:auto; background:#fafcfe;}
   .assign-group{margin-bottom:8px;}
   .assign-group > b{display:block; font-size:.82rem; color:var(--primary-dark); margin-bottom:4px;}
+  .publication-bulk{border:1px solid #bfdbfe; border-radius:10px; padding:10px; margin:8px 0 12px; background:#eff6ff;}
+  .publication-bulk-title{font-weight:700; color:var(--primary-dark); margin-bottom:6px;}
+  .publication-bulk-row{padding:8px 0; border-top:1px solid #dbeafe;}
+  .publication-bulk-row:first-of-type{border-top:0;}
+  .publication-bulk-row > b{display:block; font-size:.82rem; margin-bottom:5px;}
+  .publication-bulk-buttons{display:flex; flex-wrap:wrap; gap:5px;}
+  .publication-bulk-buttons button{padding:6px 10px; font-size:.78rem; color:var(--primary-dark); border-color:#93c5fd; background:#fff;}
+  .publication-bulk-buttons button:hover{background:#dbeafe;}
   .assign-q{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; margin:0 6px 6px 0; font-size:.8rem; background:#fff; cursor:pointer;}
   .assign-q input{margin:0;}
   .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
@@ -110,7 +118,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>📊 管理者ダッシュボード <span class="ver">v1.13</span></h1>
+      <h1>📊 管理者ダッシュボード <span class="ver">v1.14</span></h1>
       <p>簿記2級 仕訳トレーニング｜学生成績の一覧</p>
     </div>
     <div id="user-box"></div>
@@ -1050,6 +1058,43 @@ function openPublicationForm(id) {
   const scopedUnivs = currentUnivs();
   const initialMode = isMaster() ? t.mode : "univ";
   const initialUniv = isMaster() ? (t.univ || "") : ((t.mode === "univ" && canSeeUniv(t.univ)) ? t.univ : (scopedUnivs[0] || ""));
+  const bulkPresets = new Map();
+  const presetButton = (id, label, qids) => {
+    bulkPresets.set(id, qids);
+    return `<button type="button" data-publication-bulk="${esc(id)}">${esc(label)}</button>`;
+  };
+  const legacyGroups = Array.from({length:9}, (_, i) => `仕訳対策問題${"①②③④⑤⑥⑦⑧⑨"[i]}`);
+  const legacyAll = META.filter(m => legacyGroups.includes(m.group)).map(m => m.qid);
+  const legacyButtons = legacyGroups.map((g, i) =>
+    presetButton(`legacy-${i + 1}`, `${"①②③④⑤⑥⑦⑧⑨"[i]}のみすべて`, META.filter(m => m.group === g).map(m => m.qid))
+  ).join("");
+  const mockRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
+    const prefix = `2025年度2級直前模試 第${round}回・`;
+    const commercial = META.filter(m => m.group === prefix + "第1問").map(m => m.qid);
+    const industrial = META.filter(m => m.group === prefix + "第4問(1)").map(m => m.qid);
+    return `<div class="publication-bulk-row">
+      <b>2025年度2級直前模試 第${round}回</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton(`mock-${round}-all`, `第${round}回をすべて（8問）`, [...commercial, ...industrial])}
+        ${presetButton(`mock-${round}-commercial`, "第1問をすべて（5問）", commercial)}
+        ${presetButton(`mock-${round}-industrial`, "第4問(1)をすべて（3問）", industrial)}
+      </div>
+    </div>`;
+  }).join("");
+  const bulkPicker = `<div class="publication-bulk">
+    <div class="publication-bulk-title">まとめて選択</div>
+    <div class="publication-bulk-row">
+      <b>仕訳対策問題①〜⑨</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton("legacy-all", "①〜⑨をすべて（49問）", legacyAll)}
+        ${legacyButtons}
+      </div>
+    </div>
+    ${mockRows}
+    <div class="publication-bulk-buttons" style="margin-top:8px">
+      <button type="button" data-publication-clear>選択をすべて解除</button>
+    </div>
+  </div>`;
   const groups = [...new Set(META.map(m => m.group))].sort((a, b) => a.localeCompare(b, "ja"));
   const picker = groups.map(g => {
     const items = META.filter(m => m.group === g).map(m =>
@@ -1083,6 +1128,8 @@ function openPublicationForm(id) {
     <span class="muted">まで（空欄なら終了なし）</span>
     <label class="inline-check"><input id="publication-enabled" type="checkbox" ${p && p.enabled !== false ? "checked" : ""}>この設定を有効にする</label>
     <label>公開する問　<span id="publication-count" class="muted"></span></label>
+    ${bulkPicker}
+    <div class="muted" style="margin-bottom:5px">個別に調整する場合は、下の問題一覧を使用してください。</div>
     <div class="assign-picker">${picker}</div>
     <div style="margin-top:10px">
       <button id="publication-save" class="primary">保存</button>
@@ -1097,6 +1144,16 @@ function openPublicationForm(id) {
   };
   $("publication-save").onclick = savePublication;
   $("publication-cancel").onclick = () => { form.style.display = "none"; form.innerHTML = ""; editingPublicationId = null; };
+  form.querySelectorAll("[data-publication-bulk]").forEach(button => button.onclick = () => {
+    const qids = new Set(bulkPresets.get(button.dataset.publicationBulk) || []);
+    form.querySelectorAll(".assign-picker input").forEach(input => { if (qids.has(input.value)) input.checked = true; });
+    window.__publicationCount();
+  });
+  const clearButton = form.querySelector("[data-publication-clear]");
+  if (clearButton) clearButton.onclick = () => {
+    form.querySelectorAll(".assign-picker input").forEach(input => { input.checked = false; });
+    window.__publicationCount();
+  };
   window.__publicationCount();
 }
 window.__publicationCount = function() {
