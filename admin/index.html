@@ -232,7 +232,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.23</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.24</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -415,7 +415,7 @@ let assignmentSlideCount = 0;
 let currentUserEmail = "";
 let ADMIN_CONFIG = { admins: [] };
 
-/* ===== 課題（管理者が配信する5問セット） ===== */
+/* ===== 課題（管理者が配信する問題セット） ===== */
 const ASSIGN_DOC = "assignments-config";   // boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない）
 const PUBLICATION_DOC = "publications-config"; // 問題の表示対象・公開期間
 const ADMIN_DOC = "admin-config";          // 管理者権限設定ドキュメント
@@ -423,7 +423,8 @@ const GROUP_CONFIG_DOC = "group-config";   // 大学別のグループ候補
 const ROSTER_CONFIG_DOC = "student-roster-config"; // 大学別の正規学生番号・承認・利用停止
 const META_SOURCES = [
   { url:"../src/問題セット_第1問特集①-⑨.json", fallbackName:"第1問特集①〜⑨" },
-  { url:"../src/問題セット_2025年度2級直前模試_第1回-第6回.json", fallbackName:"2025年度2級直前模試 第1回〜第6回" }
+  { url:"../src/問題セット_2025年度2級直前模試_第1回-第6回.json", fallbackName:"2025年度2級直前模試 第1回〜第6回" },
+  { url:"../src/問題セット_2025年度3級直前模試_第1回-第4回.json", fallbackName:"2025年度3級直前模試 第1回〜第4回" }
 ]; // 公開設定・課題で選べる問題カタログ
 const ADMIN_URL = "https://urutoraktiti-boop.github.io/boki-shiwake-app/admin/";
 /* 大学の選択肢（生徒アプリの UNIVERSITIES と一致。生徒未登録の大学も選べるように固定リストを用意） */
@@ -1478,6 +1479,17 @@ function openPublicationForm(id) {
   }).join("");
   const mockCommercialAll = META.filter(m => /^2025年度2級直前模試 第[1-6]回・第1問$/.test(m.group)).map(m => m.qid);
   const mockIndustrialAll = META.filter(m => /^2025年度2級直前模試 第[1-6]回・第4問\(1\)$/.test(m.group)).map(m => m.qid);
+  const mock3Rows = Array.from({length:4}, (_, i) => i + 1).map(round => {
+    const group = `2025年度3級直前模試 第${round}回・第1問`;
+    const questions = META.filter(m => m.group === group).map(m => m.qid);
+    return `<div class="publication-bulk-row">
+      <b>2025年度3級直前模試 第${round}回</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton(`mock3-${round}-commercial`, "第1問をすべて（15問）", questions)}
+      </div>
+    </div>`;
+  }).join("");
+  const mock3All = META.filter(m => /^2025年度3級直前模試 第[1-4]回・第1問$/.test(m.group)).map(m => m.qid);
   const bulkPicker = `<div class="publication-bulk">
     <div class="publication-bulk-title">まとめて選択</div>
     <div class="publication-bulk-row">
@@ -1496,6 +1508,13 @@ function openPublicationForm(id) {
       </div>
     </div>
     ${mockRows}
+    <div class="publication-bulk-row">
+      <b>2025年度3級直前模試 第1回〜第4回</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton("mock3-all", "第1回〜第4回をすべて（60問）", mock3All)}
+      </div>
+    </div>
+    ${mock3Rows}
     <div class="publication-bulk-buttons" style="margin-top:8px">
       <button type="button" data-publication-clear>選択をすべて解除</button>
     </div>
