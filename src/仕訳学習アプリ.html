@@ -166,6 +166,8 @@
   .small-btns{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;}
   .small-btns button,.small-act,button.ghost{color:var(--primary-dark); background:transparent; border:1px solid var(--primary); border-radius:2px;}
   button.main{background:var(--primary); color:#fffdf7; border-radius:2px; letter-spacing:.04em;}
+  button.quiz-nav{background:var(--primary); color:#fffdf7; border:1px solid var(--primary); border-radius:2px; padding:12px 20px; font-size:.95rem; cursor:pointer; flex:1; font-weight:700; box-shadow:0 2px 0 rgba(32,40,35,.18);}
+  button.quiz-check{background:transparent; color:var(--sub); border:1px solid var(--line); border-radius:2px; padding:12px 20px; font-size:.95rem; cursor:pointer; flex:1; font-weight:500; box-shadow:none;}
   select,input[type=text]{border-radius:2px; border-color:var(--line); background:var(--paper);}
   .options{grid-template-columns:1fr; gap:0; background:transparent; border:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:0; padding:9px 2px;}
   .qhead{padding-bottom:10px; border-bottom:1px solid var(--line);}
@@ -210,7 +212,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.25</span></h1>
+      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.26</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -1003,11 +1005,11 @@ function renderQuestion(){
      </div>
      <datalist id="amt-list">${amtCandidates(q).map(v=>`<option value="${v.toLocaleString()}"></option>`).join("")}</datalist>
      <div class="btns">
-       ${session.idx>0? `<button class="ghost" onclick="goPrev()">◀ 前へ</button>`:""}
-       <button class="main" id="grade-btn" onclick="grade()">採点する</button>
+       ${session.idx>0? `<button class="quiz-nav" onclick="goPrev()">◀ 前へ</button>`:""}
+       <button class="quiz-check" id="grade-btn" onclick="grade()">解答確認</button>
        ${session.idx+1<session.list.length
-         ? `<button class="ghost" onclick="goNext()">次の問題へ ▶</button>`
-         : `<button class="ghost" style="border-color:var(--ok); color:var(--ok)" onclick="goFinish()">全体の結果へ ▶</button>`}
+         ? `<button class="quiz-nav" onclick="goNext()">次の問題へ ▶</button>`
+         : `<button class="quiz-nav" onclick="goFinish()">全体の結果へ ▶</button>`}
      </div>
      <div id="result-area"></div>
      <div style="text-align:center; border-top:1px solid var(--line); margin-top:14px; padding-top:8px">
@@ -1225,8 +1227,8 @@ function grade(){
     ${renderExplanation(q)}
     <div class="btns">
       ${session.idx+1<session.list.length
-        ? `<button class="main" onclick="goNext()">次の問題へ ▶</button>`
-        : `<button class="main" onclick="goFinish()">全体の結果へ ▶</button>`}
+        ? `<button class="quiz-nav" onclick="goNext()">次の問題へ ▶</button>`
+        : `<button class="quiz-nav" onclick="goFinish()">全体の結果へ ▶</button>`}
       ${!correct? `<button class="ghost" onclick="renderQuestion()">もう一度解く</button>`:""}
     </div>`;
   document.getElementById("grade-btn").disabled=true;
