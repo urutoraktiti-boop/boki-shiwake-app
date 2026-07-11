@@ -79,6 +79,21 @@
   .publication-bulk-buttons button:hover{background:#dbeafe;}
   .publication-bulk-buttons button.selected{color:#fff; border-color:var(--primary); background:var(--primary); font-weight:700; box-shadow:0 1px 3px rgba(26,95,180,.25);}
   .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
+  .publication-track-section{border:2px solid; border-radius:8px; padding:11px; margin:10px 0;}
+  .publication-track-section.g3{border-color:#d3ae00;background:#fff9d9;}
+  .publication-track-section.g2-commercial{border-color:#df7b20;background:#fff0df;}
+  .publication-track-section.g2-industrial{border-color:#438b55;background:#eaf6ec;}
+  .publication-track-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-weight:700;}
+  .publication-track-heading small{font-weight:400;color:var(--sub);}
+  .publication-track-section.g3 .publication-bulk-row{border-color:#eadb82;}
+  .publication-track-section.g2-commercial .publication-bulk-row{border-color:#efc79f;}
+  .publication-track-section.g2-industrial .publication-bulk-row{border-color:#add1b5;}
+  .catalog-track-list{border-left:5px solid;padding:8px 9px;margin:10px 0;background:#fff;}
+  .catalog-track-list.g3{border-color:#d3ae00;background:#fffbea;}
+  .catalog-track-list.g2-commercial{border-color:#df7b20;background:#fff6ec;}
+  .catalog-track-list.g2-industrial{border-color:#438b55;background:#f0f8f1;}
+  .catalog-track-title{font-weight:700;margin-bottom:8px;}
+  .publication-summary{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0;}
   .assign-q{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; margin:0 6px 6px 0; font-size:.8rem; background:#fff; cursor:pointer;}
   .assign-q input{margin:0;}
   .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
@@ -214,6 +229,7 @@
   .publication-bulk-buttons button:hover{background:#eee5d4;}
   .publication-bulk-buttons button.selected{color:#fffdf7; border-color:var(--primary); background:var(--primary); box-shadow:none;}
   .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
+  .publication-track-section,.catalog-track-list{border-radius:2px;}
   .ranking-card{border-radius:2px; background:transparent;}
   .foot{border-top:1px solid var(--line); padding-top:12px;}
   #login-view{max-width:680px; margin:28px auto; border-top:4px double var(--text);}
@@ -235,7 +251,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記 仕訳トレーニング管理 <span class="ver">v1.25</span></h1>
+      <h1>簿記 仕訳トレーニング管理 <span class="ver">v1.26</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -1420,6 +1436,15 @@ function canManagePublication(p) {
 function visiblePublications() {
   return PUBLICATION_DEFS.filter(canManagePublication);
 }
+function publicationSummaryHTML(qids) {
+  const counts={g3:0,"g2-commercial":0,"g2-industrial":0};
+  (qids||[]).forEach(qid=>{ const m=META.find(x=>x.qid===qid); if(m) counts[metaTrack(m)]++; });
+  return `<div class="publication-summary">
+    ${counts.g3?`<span class="level-badge g3">3級 ${counts.g3}問</span>`:""}
+    ${counts["g2-commercial"]?`<span class="level-badge g2-commercial">2級・商業簿記 ${counts["g2-commercial"]}問</span>`:""}
+    ${counts["g2-industrial"]?`<span class="level-badge g2-industrial">2級・工業簿記 ${counts["g2-industrial"]}問</span>`:""}
+  </div>`;
+}
 function renderPublicationManage() {
   const box = $("publication-list");
   if (!box) return;
@@ -1434,6 +1459,7 @@ function renderPublicationManage() {
     return `<div class="assign-list-item">
       <b>${esc(p.title || "問題公開")}</b><span class="pub-state pub-${state.key}">${state.label}</span>
       <div class="muted" style="margin:4px 0">${esc(targetLabel(p.target))}｜${(p.qids || []).length}問${owner}</div>
+      ${publicationSummaryHTML(p.qids)}
       <div class="muted" style="margin:4px 0">${esc(publicationPeriodLabel(p))}</div>
       <div class="muted" style="margin:4px 0">${(p.qids || []).map(q => esc(qidLabel(q))).join("／")}</div>
       <button data-publication-edit="${esc(p.id)}">✏ 編集</button>
@@ -1472,16 +1498,23 @@ function openPublicationForm(id) {
   const legacyButtons = legacyGroups.map((g, i) =>
     presetButton(`legacy-${i + 1}`, `${"①②③④⑤⑥⑦⑧⑨"[i]}のみすべて`, META.filter(m => m.group === g).map(m => m.qid))
   ).join("");
-  const mockRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
+  const mockCommercialRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
     const prefix = `2025年度2級直前模試 第${round}回・`;
     const commercial = META.filter(m => m.group === prefix + "第1問").map(m => m.qid);
+    return `<div class="publication-bulk-row">
+      <b>直前模試 第${round}回・第1問（商業簿記）</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton(`mock-${round}-commercial`, `第${round}回の5問を選択`, commercial)}
+      </div>
+    </div>`;
+  }).join("");
+  const mockIndustrialRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
+    const prefix = `2025年度2級直前模試 第${round}回・`;
     const industrial = META.filter(m => m.group === prefix + "第4問(1)").map(m => m.qid);
     return `<div class="publication-bulk-row">
-      <b>2025年度2級直前模試 第${round}回</b>
+      <b>直前模試 第${round}回・第4問(1)（工業簿記）</b>
       <div class="publication-bulk-buttons">
-        ${presetButton(`mock-${round}-all`, `第${round}回をすべて（8問）`, [...commercial, ...industrial])}
-        ${presetButton(`mock-${round}-commercial`, "第1問をすべて（5問）", commercial)}
-        ${presetButton(`mock-${round}-industrial`, "第4問(1)をすべて（3問）", industrial)}
+        ${presetButton(`mock-${round}-industrial`, `第${round}回の3問を選択`, industrial)}
       </div>
     </div>`;
   }).join("");
@@ -1500,40 +1533,57 @@ function openPublicationForm(id) {
   const mock3All = META.filter(m => /^2025年度3級直前模試 第[1-4]回・第1問$/.test(m.group)).map(m => m.qid);
   const bulkPicker = `<div class="publication-bulk">
     <div class="publication-bulk-title">まとめて選択</div>
-    <div class="publication-bulk-row">
-      <b>仕訳対策問題①〜⑨</b>
-      <div class="publication-bulk-buttons">
-        ${presetButton("legacy-all", "①〜⑨をすべて（49問）", legacyAll)}
-        ${legacyButtons}
+    <div class="publication-track-section g3">
+      <div class="publication-track-heading"><span>${badgeHTML({grade:3,subject:"commercial"})}</span><small>黄色の問題のみ</small></div>
+      <div class="publication-bulk-row">
+        <b>2025年度3級直前模試 第1回〜第4回</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("mock3-all", "全4回をすべて（60問）", mock3All)}
+        </div>
       </div>
+      ${mock3Rows}
     </div>
-    <div class="publication-bulk-row">
-      <b>2025年度2級直前模試 第1回〜第6回</b>
-      <div class="publication-bulk-buttons">
-        ${presetButton("mock-all", "第1回〜第6回をすべて（48問）", [...mockCommercialAll, ...mockIndustrialAll])}
-        ${presetButton("mock-commercial-all", "第1問をすべて（全6回・30問）", mockCommercialAll)}
-        ${presetButton("mock-industrial-all", "第4問(1)をすべて（全6回・18問）", mockIndustrialAll)}
+    <div class="publication-track-section g2-commercial">
+      <div class="publication-track-heading"><span>${badgeHTML({grade:2,subject:"commercial"})}</span><small>オレンジ色の問題のみ</small></div>
+      <div class="publication-bulk-row">
+        <b>仕訳対策問題①〜⑨</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("legacy-all", "①〜⑨をすべて（49問）", legacyAll)}
+          ${legacyButtons}
+        </div>
       </div>
-    </div>
-    ${mockRows}
-    <div class="publication-bulk-row">
-      <b>2025年度3級直前模試 第1回〜第4回</b>
-      <div class="publication-bulk-buttons">
-        ${presetButton("mock3-all", "第1回〜第4回をすべて（60問）", mock3All)}
+      <div class="publication-bulk-row">
+        <b>2025年度2級直前模試・商業簿記</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("mock-commercial-all", "全6回の第1問をすべて（30問）", mockCommercialAll)}
+        </div>
       </div>
+      ${mockCommercialRows}
     </div>
-    ${mock3Rows}
+    <div class="publication-track-section g2-industrial">
+      <div class="publication-track-heading"><span>${badgeHTML({grade:2,subject:"industrial"})}</span><small>緑色の問題のみ</small></div>
+      <div class="publication-bulk-row">
+        <b>2025年度2級直前模試・工業簿記</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("mock-industrial-all", "全6回の第4問(1)をすべて（18問）", mockIndustrialAll)}
+        </div>
+      </div>
+      ${mockIndustrialRows}
+    </div>
     <div class="publication-bulk-buttons" style="margin-top:8px">
       <button type="button" data-publication-clear>選択をすべて解除</button>
     </div>
   </div>`;
   const groups = [...new Set(META.map(m => m.group))].sort((a, b) => a.localeCompare(b, "ja"));
-  const picker = groups.map(g => {
-    const items = META.filter(m => m.group === g).map(m =>
-      `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount(); window.__publicationRefreshBulkButtons && window.__publicationRefreshBulkButtons()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
-    ).join("");
-    const first=META.find(m=>m.group===g);
-    return `<div class="assign-group" data-track="${metaTrack(first)}"><b>${badgeHTML(first)}${esc(g)}</b>${items}</div>`;
+  const picker = ["g3","g2-commercial","g2-industrial"].map(track => {
+    const trackGroups=groups.filter(g=>metaTrack(META.find(m=>m.group===g))===track);
+    const items=trackGroups.map(g=>{
+      const questions=META.filter(m => m.group === g).map(m =>
+        `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount(); window.__publicationRefreshBulkButtons && window.__publicationRefreshBulkButtons()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
+      ).join("");
+      return `<div class="assign-group"><b>${esc(g)}</b>${questions}</div>`;
+    }).join("");
+    return `<div class="catalog-track-list ${track}" data-track="${track}"><div class="catalog-track-title"><span class="level-badge ${track}">${trackLabel(track)}</span></div>${items}</div>`;
   }).join("");
   const univOpts = scopedUnivs.map(u => `<option value="${esc(u)}" ${initialUniv === u ? "selected" : ""}>${esc(u)}</option>`).join("");
   form.style.display = "";
@@ -1583,9 +1633,9 @@ function openPublicationForm(id) {
   $("publication-cancel").onclick = () => { form.style.display = "none"; form.innerHTML = ""; editingPublicationId = null; };
   const filterCatalog = () => {
     const grade=$("publication-grade-filter").value, subject=$("publication-subject-filter").value;
-    form.querySelectorAll(".assign-group[data-track]").forEach(group=>{
-      const track=group.dataset.track;
-      group.style.display=(grade==="all"||(grade==="g3"?track==="g3":track.startsWith("g2-")))&&(subject==="all"||track===`g2-${subject}`||(track==="g3"&&subject==="commercial"))?"":"none";
+    form.querySelectorAll(".catalog-track-list[data-track]").forEach(section=>{
+      const track=section.dataset.track;
+      section.style.display=(grade==="all"||(grade==="g3"?track==="g3":track.startsWith("g2-")))&&(subject==="all"||track===`g2-${subject}`||(track==="g3"&&subject==="commercial"))?"":"none";
     });
   };
   $("publication-grade-filter").onchange=filterCatalog;
