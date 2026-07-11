@@ -123,7 +123,7 @@
   .ranking-value{text-align:right; white-space:nowrap; font-weight:700; color:var(--primary-dark);}
   .assignment-slide-overlay{position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:14px; background:rgba(24,31,27,.9);}
   .assignment-slide-shell{width:min(1200px,96vw);}
-  .assignment-slide{display:none; aspect-ratio:16/9; overflow:hidden; background:var(--paper); color:var(--text); border-top:6px double var(--text); padding:4.5% 5%;}
+  .assignment-slide{display:none; aspect-ratio:16/9; overflow:hidden; background:var(--paper); color:var(--text); border-top:6px double var(--text); padding:4% 5%; min-height:0;}
   .assignment-slide.active{display:flex; flex-direction:column;}
   .slide-kicker{font-family:Georgia,serif; letter-spacing:.18em; color:var(--accent); font-size:.72rem;}
   .assignment-slide h2{font-family:"Yu Mincho","Hiragino Mincho ProN",Georgia,serif; font-size:clamp(1.4rem,2.8vw,2.5rem); margin:5px 0 12px;}
@@ -131,16 +131,14 @@
   .slide-metric{border-top:3px solid var(--primary); padding-top:8px;}
   .slide-metric strong{display:block; font-family:Georgia,"Yu Mincho",serif; font-size:clamp(1.25rem,2.6vw,2.25rem); color:var(--primary-dark);}
   .slide-review{margin:auto 0; padding:16px 18px; border-left:5px solid var(--primary); background:var(--paper-deep); font-size:clamp(.85rem,1.45vw,1.2rem);}
-  .slide-q-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; margin-top:5px;}
+  .slide-q-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; margin-top:8px; min-height:0;}
   .slide-q-row{display:grid; grid-template-columns:minmax(0,1fr) 3fr auto; gap:10px; align-items:center; font-size:clamp(.7rem,1.15vw,.95rem);}
   .slide-q-bar{height:12px; background:#e4ded2; overflow:hidden;}
   .slide-q-bar i{display:block; height:100%; background:var(--primary);}
-  .slide-ranking-grid{display:grid; grid-template-columns:1fr 1fr; gap:30px; min-height:0;}
-  .slide-ranking{min-height:0;}
-  .slide-ranking ol{margin:6px 0 0; padding-left:2em; columns:1;}
-  .slide-ranking li{padding:3px 0; border-bottom:1px solid var(--line); font-size:clamp(.65rem,1vw,.88rem);}
-  .slide-awards{display:flex; gap:12px; flex-wrap:wrap; margin-top:auto; padding-top:10px; border-top:1px solid var(--text);}
-  .slide-award{flex:1; min-width:180px;}
+  .slide-ranking-single{min-height:0; flex:1;}
+  .slide-ranking-single ol{margin:8px 0 0; padding-left:2.2em; columns:2; column-gap:42px;}
+  .slide-ranking-single li{break-inside:avoid; padding:7px 4px; border-bottom:1px solid var(--line); font-size:clamp(.72rem,1.15vw,1rem);}
+  .slide-ranking-note{margin-top:auto; padding:10px 14px; border-left:4px solid var(--primary); background:var(--paper-deep);}
   .assignment-slide-controls{display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap; color:#fff;}
   .assignment-slide-controls button{background:#fffdf7; color:#203e35;}
   .foot{color:var(--sub); font-size:.78rem; text-align:center; margin-top:18px;}
@@ -218,7 +216,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.17</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.18</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -350,6 +348,7 @@ let OPEN_UNIVS = new Set();
 let openAssignResultId = null;
 let assignStudentListOpen = false;
 let assignmentSlideIndex = 0;
+let assignmentSlideCount = 0;
 let currentUserEmail = "";
 let ADMIN_CONFIG = { admins: [] };
 
@@ -1649,7 +1648,7 @@ function renderAssignResults() {
   box.innerHTML = `<div class="assign-result-panel">
     <div class="assign-result-head">
       <div><b>📊 ${esc(a.title || "課題")} の成績結果</b><br><span class="muted">対象：${esc(targetLabel(a.target))}</span></div>
-      <div><button class="primary" onclick="window.__openAssignmentSlides()">16:9 共有スライド（3枚）</button> <button onclick="window.__closeAssignResult()">閉じる</button></div>
+      <div><button class="primary" onclick="window.__openAssignmentSlides()">16:9 共有スライド（自動構成）</button> <button onclick="window.__closeAssignResult()">閉じる</button></div>
     </div>
     <div class="mini-stat-row">
       <div class="mini-stat"><div class="num">${entries.length}/${targeted.length}名</div><div class="lbl">提出人数</div></div>
@@ -1692,50 +1691,50 @@ window.__openAssignmentSlides = function(previewAssignment = null, previewRows =
   const an = assignmentAnalytics(a, previewRows || ROWS);
   document.getElementById("assignment-slide-overlay")?.remove();
   assignmentSlideIndex = 0;
-  const qRows = an.qStats.map(q => `<div class="slide-q-row"><span>${esc(q.label)}</span><span class="slide-q-bar"><i style="width:${q.rate}%"></i></span><b>${q.rate}%</b></div>`).join("");
-  const speedWinner = an.bySpeed[0];
-  const improveWinner = an.byImprovement[0];
-  document.body.insertAdjacentHTML("beforeend", `<div id="assignment-slide-overlay" class="assignment-slide-overlay">
-    <div class="assignment-slide-shell">
-      <section class="assignment-slide active" data-slide="0">
-        <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT 01</span>
-        <h2>${esc(a.title || "課題")}｜全体結果</h2>
-        <p>${esc(targetLabel(a.target))}</p>
-        <div class="slide-metrics">
-          <div class="slide-metric"><strong>${an.entries.length}/${an.targeted.length}</strong><span>提出人数</span></div>
-          <div class="slide-metric"><strong>${an.submitRate}%</strong><span>提出率</span></div>
-          <div class="slide-metric"><strong>${an.entries.length ? an.avgScore.toFixed(1) : "–"}${an.max ? `/${an.max}` : ""}</strong><span>平均点</span></div>
-          <div class="slide-metric"><strong>${fmtDur(an.avgTime)}</strong><span>平均所要時間</span></div>
-        </div>
-        <div class="slide-review"><b>総評</b><br>${esc(an.review)}</div>
-      </section>
-      <section class="assignment-slide" data-slide="1">
-        <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT 02</span>
-        <h2>問題別の正答率</h2>
-        <p class="muted">正答率の低い問題は、次回の授業・復習課題で重点的に扱います。</p>
-        <div class="slide-q-grid">${qRows || '<p class="muted">問題データがありません。</p>'}</div>
-      </section>
-      <section class="assignment-slide" data-slide="2">
-        <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT 03</span>
-        <h2>今回のランキング</h2>
-        <div class="slide-ranking-grid">
-          <div class="slide-ranking"><h3>得点ランキング TOP10</h3>${slideRankRows(an.byScore, x => `${x.ab.score}/${x.ab.max}点｜${fmtDur(x.ab.timeMs)}`)}</div>
-          <div class="slide-ranking"><h3>挑戦回数ランキング TOP10</h3>${slideRankRows(an.byAttempts, x => `${x.ab.attempts}回｜最高${x.ab.score}点`)}</div>
-        </div>
-        <div class="slide-awards">
-          <div class="slide-award"><span class="slide-kicker">SPEED MASTER</span><br><b>${speedWinner ? `${esc(maskStudentId(speedWinner.r.sid))}｜${fmtDur(speedWinner.ab.timeMs)}（${speedWinner.ab.score}点）` : "該当者なし"}</b></div>
-          <div class="slide-award"><span class="slide-kicker">MOST IMPROVED</span><br><b>${improveWinner ? `${esc(maskStudentId(improveWinner.r.sid))}｜+${improveWinner.improve}点` : "該当者なし"}</b></div>
-        </div>
-      </section>
+  const slides = [];
+  const addSlide = (title, body, subtitle = "") => {
+    const index = slides.length;
+    slides.push(`<section class="assignment-slide ${index === 0 ? "active" : ""}" data-slide="${index}">
+      <span class="slide-kicker">SHIWAKE STUDY JOURNAL / RESULT ${String(index + 1).padStart(2, "0")}</span>
+      <h2>${title}</h2>${subtitle ? `<p class="muted">${subtitle}</p>` : ""}${body}
+    </section>`);
+  };
+  addSlide(`${esc(a.title || "課題")}｜全体結果`, `
+    <p>${esc(targetLabel(a.target))}</p>
+    <div class="slide-metrics">
+      <div class="slide-metric"><strong>${an.entries.length}/${an.targeted.length}</strong><span>提出人数</span></div>
+      <div class="slide-metric"><strong>${an.submitRate}%</strong><span>提出率</span></div>
+      <div class="slide-metric"><strong>${an.entries.length ? an.avgScore.toFixed(1) : "–"}${an.max ? `/${an.max}` : ""}</strong><span>平均点</span></div>
+      <div class="slide-metric"><strong>${fmtDur(an.avgTime)}</strong><span>平均所要時間</span></div>
     </div>
-    <div class="assignment-slide-controls"><button onclick="window.__moveAssignmentSlide(-1)">← 前へ</button><b id="assignment-slide-counter">1 / 3</b><button onclick="window.__moveAssignmentSlide(1)">次へ →</button><button onclick="window.__fullscreenAssignmentSlides()">全画面</button><button onclick="window.__closeAssignmentSlides()">閉じる</button></div>
+    <div class="slide-review"><b>総評</b><br>${esc(an.review)}</div>`);
+
+  const questionPageSize = 8;
+  const questionPages = Math.max(1, Math.ceil(an.qStats.length / questionPageSize));
+  for (let page = 0; page < questionPages; page++) {
+    const chunk = an.qStats.slice(page * questionPageSize, (page + 1) * questionPageSize);
+    const qRows = chunk.map(q => `<div class="slide-q-row"><span>${esc(q.label)}</span><span class="slide-q-bar"><i style="width:${q.rate}%"></i></span><b>${q.rate}%</b></div>`).join("");
+    addSlide(`問題別の正答率${questionPages > 1 ? `（${page + 1}/${questionPages}）` : ""}`, `<div class="slide-q-grid">${qRows || '<p class="muted">問題データがありません。</p>'}</div>`, "1枚につき最大8問を表示しています。");
+  }
+
+  const rankingPages = [
+    { title:"得点ランキング TOP10", items:an.byScore, value:x => `${x.ab.score}/${x.ab.max}点｜${fmtDur(x.ab.timeMs)}`, note:"得点を優先し、同点の場合は回答時間が短い順です。" },
+    { title:"挑戦回数ランキング TOP10", items:an.byAttempts, value:x => `${x.ab.attempts}回｜最高${x.ab.score}点`, note:"繰り返し挑戦した学習量をたたえます。" },
+    { title:"スピードマスター TOP10", items:an.bySpeed, value:x => `${fmtDur(x.ab.timeMs)}｜${x.ab.score}/${x.ab.max}点`, note:"得点率70%以上の学生を対象に、回答時間が短い順です。" },
+    { title:"伸び幅ランキング TOP10", items:an.byImprovement, value:x => `+${x.improve}点｜${x.ab.attempts}回`, note:"初回挑戦から最新挑戦までの得点上昇を集計しています。" }
+  ];
+  rankingPages.forEach(rank => addSlide(rank.title, `<div class="slide-ranking-single">${slideRankRows(rank.items, rank.value)}</div><div class="slide-ranking-note">${esc(rank.note)}</div>`));
+  assignmentSlideCount = slides.length;
+  document.body.insertAdjacentHTML("beforeend", `<div id="assignment-slide-overlay" class="assignment-slide-overlay">
+    <div class="assignment-slide-shell">${slides.join("")}</div>
+    <div class="assignment-slide-controls"><button onclick="window.__moveAssignmentSlide(-1)">← 前へ</button><b id="assignment-slide-counter">1 / ${assignmentSlideCount}</b><button onclick="window.__moveAssignmentSlide(1)">次へ →</button><button onclick="window.__fullscreenAssignmentSlides()">全画面</button><button onclick="window.__closeAssignmentSlides()">閉じる</button></div>
   </div>`);
 };
 window.__moveAssignmentSlide = function(delta) {
-  assignmentSlideIndex = Math.max(0, Math.min(2, assignmentSlideIndex + delta));
+  assignmentSlideIndex = Math.max(0, Math.min(assignmentSlideCount - 1, assignmentSlideIndex + delta));
   document.querySelectorAll(".assignment-slide").forEach((slide, i) => slide.classList.toggle("active", i === assignmentSlideIndex));
   const counter = document.getElementById("assignment-slide-counter");
-  if (counter) counter.textContent = `${assignmentSlideIndex + 1} / 3`;
+  if (counter) counter.textContent = `${assignmentSlideIndex + 1} / ${assignmentSlideCount}`;
 };
 window.__fullscreenAssignmentSlides = function() {
   const overlay = document.getElementById("assignment-slide-overlay");
