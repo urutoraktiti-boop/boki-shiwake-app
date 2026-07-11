@@ -212,7 +212,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.27</span></h1>
+      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.28</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -333,6 +333,7 @@ const SYNC_COLLECTION="boki2_sync";
 const ASSIGN_DOC="assignments-config";  /* boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない） */
 const PUBLICATION_DOC="publications-config"; /* 問題ごとの対象・公開期間 */
 const GROUP_CONFIG_DOC="group-config"; /* 大学別のグループ候補 */
+const ROSTER_CONFIG_DOC="student-roster-config"; /* 正規名簿と管理者による利用停止 */
 const PUBLICATION_CACHE_KEY="boki2_publications_cache";
 
 /* 同梱問題セット（配布版ではここに問題データが入り、初回起動時に自動追加される） */
@@ -461,6 +462,7 @@ function univOptionsHTML(){
     +`<option value="__other__">その他（直接入力）</option>`;
 }
 let GROUP_CONFIG={groupsByUniversity:{}};
+let ROSTER_ACCESS={suspendedCodes:{}};
 function groupValues(univ){
   const values=GROUP_CONFIG.groupsByUniversity&&GROUP_CONFIG.groupsByUniversity[univ];
   return Array.isArray(values)?values.map(String).filter(Boolean):[];
@@ -476,6 +478,23 @@ async function loadGroupConfig(){
     const data=await cloudLoad(GROUP_CONFIG_DOC);
     GROUP_CONFIG={groupsByUniversity:(data&&data.groupsByUniversity&&typeof data.groupsByUniversity==="object")?data.groupsByUniversity:{}};
   }catch(e){ GROUP_CONFIG={groupsByUniversity:{}}; }
+}
+async function loadRosterAccess(){
+  try{
+    const data=await cloudLoad(ROSTER_CONFIG_DOC);
+    ROSTER_ACCESS={suspendedCodes:(data&&data.suspendedCodes&&typeof data.suspendedCodes==="object")?data.suspendedCodes:{}};
+  }catch(e){ ROSTER_ACCESS={suspendedCodes:{}}; }
+}
+function enforceRosterAccess(){
+  if(isAdminPreview()) return;
+  const code=store.sync&&store.sync.code;
+  if(!code || !ROSTER_ACCESS.suspendedCodes[code]) return;
+  if(document.getElementById("access-suspended")) return;
+  pauseTimer();
+  const bg=document.createElement("div");
+  bg.id="access-suspended"; bg.className="modal-bg"; bg.style.zIndex="9999";
+  bg.innerHTML=`<div class="modal" style="text-align:center"><h3 style="margin-top:0">利用状況を確認してください</h3><p style="font-size:.9rem; color:var(--sub)">登録情報の確認が必要なため、現在このアプリは利用できません。<br>学籍番号（大原登録番号）をご確認のうえ、担当の先生へお問い合わせください。</p><div style="margin-top:12px; font-size:.78rem; color:var(--sub)">同期コード：${esc(code)}</div></div>`;
+  document.body.appendChild(bg);
 }
 function updateProfileGroupOptions(){
   const sel=document.getElementById("univ-select"), other=document.getElementById("univ-other"), group=document.getElementById("group-input");
@@ -1770,7 +1789,7 @@ initSync();
    端末内の記録をクラウドへアップロード（＝管理者ダッシュボードに出るようにする・v3.12） */
 ensureSyncCode();
 /* 課題と問題公開設定を取得してホームに反映 */
-Promise.all([loadAssignments(),loadPublications(),loadGroupConfig()]).then(()=>{ initProfile(); updateHome(); renderAssignments(); requireProfile(); });
+Promise.all([loadAssignments(),loadPublications(),loadGroupConfig(),loadRosterAccess()]).then(()=>{ initProfile(); updateHome(); renderAssignments(); requireProfile(); enforceRosterAccess(); });
 /* 別タブ・バックグラウンドに離れている間はストップウォッチを一時停止（戻ったら再開） */
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden){ pauseTimer(); }

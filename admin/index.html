@@ -104,6 +104,11 @@
   .qr-url{margin:14px auto 0; max-width:900px; font-size:clamp(.72rem,1.2vw,1rem); word-break:break-all; color:#40554d;}
   .qr-actions{position:absolute; top:18px; right:18px; display:flex; gap:8px;}
   .qr-actions button{background:#fff; border-color:#203e35; color:#203e35;}
+  .roster-row{display:grid; grid-template-columns:minmax(180px,1fr) auto auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line);}
+  .roster-row:last-child{border-bottom:0;}
+  .roster-actions{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
+  .roster-state{display:inline-block; padding:2px 8px; font-size:.74rem; font-weight:700; border-radius:999px; white-space:nowrap;}
+  .roster-ok{background:#e3f5ea; color:#1f7a44;}.roster-warn{background:#fff0cc; color:#8a5b00;}.roster-off{background:#fee2e2; color:#b91c1c;}.roster-none{background:#eef1f5; color:var(--sub);}
   .admin-form{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;}
   .admin-form input,.admin-form select{font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
   .admin-list-item{border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fff; font-size:.84rem; display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;}
@@ -227,7 +232,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.20</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.21</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -257,7 +262,7 @@
   <!-- ログイン後 -->
   <div id="main-view" style="display:none">
     <nav class="journal-admin-nav" aria-label="管理画面内メニュー">
-      <a href="#grade-records">学生記録</a><a href="#group-settings">グループ設定</a><a href="#publication-records">公開設定</a><a href="#assignment-records">課題管理</a><a href="#university-links">告知リンク</a>
+      <a href="#grade-records">学生記録</a><a href="#roster-settings">学生番号照合</a><a href="#group-settings">グループ設定</a><a href="#publication-records">公開設定</a><a href="#assignment-records">課題管理</a><a href="#university-links">告知リンク</a>
     </nav>
     <div id="summary" class="stat-row"></div>
     <div class="card" id="university-links">
@@ -298,6 +303,21 @@
           <tbody id="tbody"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card" id="roster-settings">
+      <div class="sec-title">🪪 学籍番号（大原登録番号）の照合管理</div>
+      <p class="muted" style="margin-top:0">大学ごとの正規番号をCSVで登録し、アプリ登録番号と照合します。グループは照合しません。</p>
+      <div class="admin-form">
+        <label>大学：<select id="roster-univ-select"></select></label>
+        <label>取込方法：<select id="roster-import-mode"><option value="replace">現在の名簿を置き換え</option><option value="append">現在の名簿に追加</option></select></label>
+        <input id="roster-file-input" type="file" accept=".csv,text/csv,text/plain" style="display:none">
+        <button id="roster-import-btn" class="primary">CSVをインポート</button>
+        <button id="roster-template-btn">CSV雛形を保存</button>
+      </div>
+      <div id="roster-summary" class="mini-stat-row"></div>
+      <div id="roster-msg" class="muted"></div>
+      <div id="roster-review-list" style="margin-top:10px"></div>
     </div>
 
     <div class="card" id="group-settings">
@@ -398,6 +418,7 @@ const ASSIGN_DOC = "assignments-config";   // boki2_sync 内の課題定義ド�
 const PUBLICATION_DOC = "publications-config"; // 問題の表示対象・公開期間
 const ADMIN_DOC = "admin-config";          // 管理者権限設定ドキュメント
 const GROUP_CONFIG_DOC = "group-config";   // 大学別のグループ候補
+const ROSTER_CONFIG_DOC = "student-roster-config"; // 大学別の正規学生番号・承認・利用停止
 const META_SOURCES = [
   { url:"../src/問題セット_第1問特集①-⑨.json", fallbackName:"第1問特集①〜⑨" },
   { url:"../src/問題セット_2025年度2級直前模試_第1回-第6回.json", fallbackName:"2025年度2級直前模試 第1回〜第6回" }
@@ -419,6 +440,7 @@ let editingId = null;   // 編集中の課題ID（新規は null）
 let PUBLICATION_DEFS = [];
 let editingPublicationId = null;
 let GROUP_CONFIG = { groupsByUniversity:{} };
+let ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{} };
 
 /* ===== 認証 ===== */
 $("login-btn").onclick = async () => {
@@ -602,6 +624,115 @@ async function saveGroupSettings() {
   }
 }
 
+function normalizeStudentId(value) {
+  return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, "").toUpperCase();
+}
+function normalizeRosterConfig(data) {
+  const mapOfArrays = value => {
+    const out = {};
+    if (value && typeof value === "object") Object.entries(value).forEach(([univ, ids]) => {
+      out[univ] = [...new Set((Array.isArray(ids) ? ids : []).map(normalizeStudentId).filter(Boolean))];
+    });
+    return out;
+  };
+  return {
+    rostersByUniversity:mapOfArrays(data?.rostersByUniversity),
+    approvedByUniversity:mapOfArrays(data?.approvedByUniversity),
+    suspendedCodes:(data?.suspendedCodes && typeof data.suspendedCodes === "object") ? {...data.suspendedCodes} : {}
+  };
+}
+function rosterStatus(row) {
+  if (ROSTER_CONFIG.suspendedCodes[row.code]) return { key:"off", label:"利用停止" };
+  const roster = ROSTER_CONFIG.rostersByUniversity[row.univ] || [];
+  const approved = ROSTER_CONFIG.approvedByUniversity[row.univ] || [];
+  if (!roster.length) return { key:"none", label:"名簿未登録" };
+  const sid = normalizeStudentId(row.sid);
+  return roster.includes(sid) || approved.includes(sid) ? { key:"ok", label:"確認済み" } : { key:"warn", label:"要確認" };
+}
+async function updateRosterConfig(mutator) {
+  const ref = doc(db, SYNC_COLLECTION, ROSTER_CONFIG_DOC);
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    let current = {};
+    if (snap.exists()) { try { current = JSON.parse(snap.data().data || "{}"); } catch (e) {} }
+    const next = normalizeRosterConfig(current);
+    mutator(next);
+    const payload = {...next, updatedAt:Date.now()};
+    tx.set(ref, { data:JSON.stringify(payload), updatedAt:payload.updatedAt });
+    ROSTER_CONFIG = next;
+  });
+}
+function editableRosterUniversities() {
+  return isMaster() ? UNIVERSITIES : UNIVERSITIES.filter(u => canSeeUniv(u));
+}
+function renderRosterSettings() {
+  const select = $("roster-univ-select");
+  if (!select) return;
+  const univs = editableRosterUniversities();
+  const previous = univs.includes(select.value) ? select.value : (univs[0] || "");
+  select.innerHTML = univs.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+  select.value = previous;
+  select.onchange = renderRosterReview;
+  $("roster-import-btn").onclick = () => $("roster-file-input").click();
+  $("roster-file-input").onchange = importRosterFile;
+  $("roster-template-btn").onclick = downloadRosterTemplate;
+  renderRosterReview();
+}
+function renderRosterReview() {
+  const univ = $("roster-univ-select")?.value;
+  if (!univ) return;
+  const students = ROWS.filter(r => r.univ === univ);
+  const counts = {ok:0,warn:0,off:0,none:0};
+  students.forEach(r => counts[rosterStatus(r).key]++);
+  const rosterCount = (ROSTER_CONFIG.rostersByUniversity[univ] || []).length;
+  $("roster-summary").innerHTML = [
+    ["正規名簿",rosterCount+"名"],["アプリ登録",students.length+"名"],["確認済み",counts.ok+"名"],["要確認",counts.warn+"名"],["利用停止",counts.off+"名"]
+  ].map(([l,n])=>`<div class="mini-stat"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join("");
+  const order={warn:0,off:1,none:2,ok:3};
+  const sorted=students.slice().sort((a,b)=>order[rosterStatus(a).key]-order[rosterStatus(b).key]||a.sid.localeCompare(b.sid,"ja"));
+  $("roster-review-list").innerHTML = sorted.length ? sorted.map(r=>{
+    const state=rosterStatus(r);
+    const actions=state.key==="warn" ? `<button data-roster-approve="${esc(r.code)}">正規学生として承認</button><button data-roster-suspend="${esc(r.code)}">利用停止</button><button data-roster-delete="${esc(r.code)}">利用停止して削除</button>`
+      : state.key==="off" ? `<button data-roster-resume="${esc(r.code)}">利用を再開</button><button data-roster-delete="${esc(r.code)}">記録を削除</button>` : "";
+    return `<div class="roster-row"><div><b>${esc(r.sid)}</b><br><span class="muted">最終更新 ${r.updatedAt?new Date(r.updatedAt).toLocaleDateString("ja-JP"):"―"}</span></div><span class="roster-state roster-${state.key}">${state.label}</span><div class="roster-actions">${actions}</div></div>`;
+  }).join("") : `<p class="muted">この大学のアプリ登録者はまだいません。</p>`;
+  $("roster-review-list").querySelectorAll("[data-roster-approve]").forEach(b=>b.onclick=()=>approveRosterRow(b.dataset.rosterApprove));
+  $("roster-review-list").querySelectorAll("[data-roster-suspend]").forEach(b=>b.onclick=()=>suspendRosterRow(b.dataset.rosterSuspend));
+  $("roster-review-list").querySelectorAll("[data-roster-resume]").forEach(b=>b.onclick=()=>resumeRosterRow(b.dataset.rosterResume));
+  $("roster-review-list").querySelectorAll("[data-roster-delete]").forEach(b=>b.onclick=()=>deleteRosterRow(b.dataset.rosterDelete));
+}
+function parseRosterCSV(text) {
+  const lines=String(text||"").replace(/^\uFEFF/,"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const ids=[];
+  lines.forEach((line,i)=>{
+    const first=(line.match(/^\s*"((?:[^"]|"")*)"/)?.[1]?.replace(/""/g,'"') ?? line.split(/[\t,]/)[0]);
+    const id=normalizeStudentId(first);
+    if (!id || (i===0 && /(学籍|登録|番号|student|id)/i.test(id))) return;
+    ids.push(id);
+  });
+  return [...new Set(ids)];
+}
+async function importRosterFile(e) {
+  const file=e.target.files?.[0]; e.target.value=""; if(!file) return;
+  const univ=$("roster-univ-select").value, mode=$("roster-import-mode").value;
+  const ids=parseRosterCSV(await file.text());
+  if(!ids.length){ alert("学籍番号（大原登録番号）を読み取れませんでした。"); return; }
+  const current=ROSTER_CONFIG.rostersByUniversity[univ]||[];
+  const next=mode==="append"?[...new Set([...current,...ids])]:ids;
+  if(!confirm(`${univ}の正規名簿を${next.length}名で${mode==="append"?"追加更新":"置き換え"}ます。よろしいですか？`)) return;
+  try { await updateRosterConfig(c=>{c.rostersByUniversity[univ]=next;}); $("roster-msg").textContent=`✅ ${file.name}：${ids.length}件を取り込みました`; renderRosterReview(); }
+  catch(err){ $("roster-msg").textContent="取込に失敗しました："+(err.code||err.message); }
+}
+function downloadRosterTemplate(){
+  const blob=new Blob(["\uFEFF学籍番号（大原登録番号）\n20260001\n20260002\n"],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="学生番号名簿_雛形.csv"; a.click(); URL.revokeObjectURL(a.href);
+}
+function rowByCode(code){ return ROWS.find(r=>r.code===code); }
+async function approveRosterRow(code){ const r=rowByCode(code); if(!r)return; await updateRosterConfig(c=>{const a=c.approvedByUniversity[r.univ]||[]; c.approvedByUniversity[r.univ]=[...new Set([...a,normalizeStudentId(r.sid)])];}); renderRosterReview(); }
+async function suspendRosterRow(code){ const r=rowByCode(code); if(!r||!confirm(`${r.sid}の利用を停止しますか？`))return; await updateRosterConfig(c=>{c.suspendedCodes[code]={univ:r.univ,sid:r.sid,suspendedAt:Date.now(),by:currentUserEmail};}); renderRosterReview(); }
+async function resumeRosterRow(code){ await updateRosterConfig(c=>{delete c.suspendedCodes[code];}); renderRosterReview(); }
+async function deleteRosterRow(code){ const r=rowByCode(code); if(!r||!confirm(`${r.sid}を利用停止し、クラウド記録を削除しますか？`))return; await updateRosterConfig(c=>{c.suspendedCodes[code]={univ:r.univ,sid:r.sid,suspendedAt:Date.now(),by:currentUserEmail};}); await deleteDoc(doc(db,SYNC_COLLECTION,code)); ROWS=ROWS.filter(x=>x.code!==code); render(); renderRosterReview(); }
+
 onAuthStateChanged(auth, async user => {
   if (user) {
     currentUserEmail = normalizeEmail(user.email);
@@ -656,16 +787,18 @@ async function loadData() {
     ASSIGN_DEFS = [];
     PUBLICATION_DEFS = [];
     GROUP_CONFIG = { groupsByUniversity:{} };
+    ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{} };
     const groupSet = new Set();
     snap.forEach(doc => {
       const f = doc.data();
       let data = {};
       try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
       // 課題定義・管理者設定ドキュメント（および万一の予約ID）は学生行に入れない
-      if (doc.id === ASSIGN_DOC || doc.id === PUBLICATION_DOC || doc.id === ADMIN_DOC || doc.id === GROUP_CONFIG_DOC || doc.id.startsWith("__")) {
+      if (doc.id === ASSIGN_DOC || doc.id === PUBLICATION_DOC || doc.id === ADMIN_DOC || doc.id === GROUP_CONFIG_DOC || doc.id === ROSTER_CONFIG_DOC || doc.id.startsWith("__")) {
         if (doc.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
         if (doc.id === PUBLICATION_DOC) PUBLICATION_DEFS = Array.isArray(data.publications) ? data.publications : [];
         if (doc.id === GROUP_CONFIG_DOC) GROUP_CONFIG = { groupsByUniversity:(data.groupsByUniversity && typeof data.groupsByUniversity === "object") ? data.groupsByUniversity : {} };
+        if (doc.id === ROSTER_CONFIG_DOC) ROSTER_CONFIG = normalizeRosterConfig(data);
         return;
       }
       const tests = Array.isArray(data.tests) ? data.tests : [];
@@ -708,6 +841,7 @@ async function loadData() {
     buildUnivFilter();
     renderUnivLinks();
     renderGroupSettings();
+    renderRosterSettings();
     render();
     renderPublicationManage();
     renderAssignManage();

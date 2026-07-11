@@ -35,7 +35,7 @@ service cloud.firestore {
     }
 
     function isReservedDoc(code) {
-      return code in ['assignments-config', 'publications-config', 'admin-config', 'group-config'];
+      return code in ['assignments-config', 'publications-config', 'admin-config', 'group-config', 'student-roster-config'];
     }
 
     // ===== 簿記2級 学生の学習記録（同期コードごと1件） =====
@@ -44,12 +44,13 @@ service cloud.firestore {
       // ただし課題定義・問題公開設定ドキュメントは管理者だけ、
       // 管理者設定ドキュメント（admin-config）はマスター管理者だけが書き換え可能。
       allow get: if !isReservedDoc(code)
-                 || code in ['assignments-config', 'publications-config', 'group-config']
+                 || code in ['assignments-config', 'publications-config', 'group-config', 'student-roster-config']
                  || isAdmin();
       allow create, update: if !isReservedDoc(code)
                             || (code == 'assignments-config' && isAdmin())
                             || (code == 'publications-config' && isAdmin())
                             || (code == 'group-config' && isAdmin())
+                            || (code == 'student-roster-config' && isAdmin())
                             || (code == 'admin-config' && isMasterAdmin());
 
       // 管理者だけ「一覧（list）」できる ＝ ダッシュボード用
@@ -57,8 +58,9 @@ service cloud.firestore {
       //  ・大学別管理者は admin-config に登録されたメールを許可
       allow list: if isAdmin();
 
-      // 削除はマスター管理者だけ許可（大学別管理者は閲覧・課題管理中心）
-      allow delete: if isMasterAdmin();
+      // 学生記録の削除は管理者に許可。担当大学の制限は管理画面側で行う。
+      // 管理用の予約ドキュメント自体は削除しない。
+      allow delete: if isAdmin() && !isReservedDoc(code);
     }
 
     // ===== 3級版を作る場合は、ここに boki3_sync を同じ形で追加する =====
