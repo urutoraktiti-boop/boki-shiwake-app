@@ -212,7 +212,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.26</span></h1>
+      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.27</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -1200,7 +1200,6 @@ function renderExplanation(q){
 function grade(){
   const q=session.list[session.idx];
   const d=readRows("debit"), c=readRows("credit");
-  if(!d.length||!c.length){ alert("借方・貸方の両方に記号と金額を入力してください。"); return; }
   saveCurrent();
   const correct = sameEntries(d,q.debit) && sameEntries(c,q.credit);
   const a=session.answers[session.idx]; a.graded=true; a.correct=correct;
