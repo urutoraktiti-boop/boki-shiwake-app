@@ -93,6 +93,17 @@
   .link-url{display:block; color:var(--sub); font-size:.74rem; word-break:break-all; margin:4px 0 8px;}
   .admin-preview-btn{display:inline-block; margin-left:8px; border:1px solid #8f5f00; border-radius:8px; background:#fff4d6; color:#7a4e00; padding:7px 12px; font-size:.82rem; font-weight:700; text-decoration:none;}
   .admin-preview-btn:hover{background:#ffe5a3; color:#5f3c00;}
+  .qr-open-btn{margin-left:8px; color:#fff; border-color:var(--primary); background:var(--primary);}
+  .qr-fullscreen{position:fixed; inset:0; z-index:300; display:none; align-items:center; justify-content:center; padding:24px; background:#f8f5ed; color:#203e35;}
+  .qr-fullscreen.open{display:flex;}
+  .qr-stage{width:min(940px,96vw); text-align:center;}
+  .qr-stage h2{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:clamp(1.8rem,4vw,3.5rem); margin:0 0 4px;}
+  .qr-stage p{margin:0 0 14px; font-size:clamp(.85rem,1.5vw,1.15rem); color:var(--sub);}
+  .qr-canvas-wrap{display:inline-flex; align-items:center; justify-content:center; padding:22px; background:#fff; border:2px solid #203e35; box-shadow:0 10px 40px rgba(0,0,0,.12);}
+  #qr-fullscreen-canvas{display:block; width:min(58vh,72vw)!important; height:min(58vh,72vw)!important; image-rendering:pixelated;}
+  .qr-url{margin:14px auto 0; max-width:900px; font-size:clamp(.72rem,1.2vw,1rem); word-break:break-all; color:#40554d;}
+  .qr-actions{position:absolute; top:18px; right:18px; display:flex; gap:8px;}
+  .qr-actions button{background:#fff; border-color:#203e35; color:#203e35;}
   .admin-form{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;}
   .admin-form input,.admin-form select{font-family:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.88rem;}
   .admin-list-item{border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fff; font-size:.84rem; display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;}
@@ -216,7 +227,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.19</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.20</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -333,6 +344,18 @@
   </p>
 </div>
 
+<div id="qr-fullscreen" class="qr-fullscreen" role="dialog" aria-modal="true" aria-labelledby="qr-fullscreen-title">
+  <div class="qr-actions"><button id="qr-copy-btn">URLをコピー</button><button id="qr-close-btn">✕ 閉じる</button></div>
+  <div class="qr-stage">
+    <div class="slide-kicker">SHIWAKE STUDY JOURNAL</div>
+    <h2 id="qr-fullscreen-title"></h2>
+    <p>スマートフォンのカメラで読み取ってください</p>
+    <div class="qr-canvas-wrap"><canvas id="qr-fullscreen-canvas" width="640" height="640"></canvas></div>
+    <div id="qr-fullscreen-url" class="qr-url"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail }
@@ -735,6 +758,7 @@ function renderUnivLinks() {
       <b>${esc(u.name)}</b>
       <span class="link-url">${esc(url)}</span>
       <button data-copy-link="${esc(url)}">リンクをコピー</button>
+      <button class="qr-open-btn" data-qr-url="${esc(url)}" data-qr-univ="${esc(u.name)}">QRコードを表示</button>
       <a class="admin-preview-btn" href="${esc(previewUrl)}" target="_blank" rel="noopener">管理者確認用</a>
     </div>`;
   }).join("") || `<p class="muted">担当大学が設定されていません。マスター管理者にご確認ください。</p>`;
@@ -750,7 +774,53 @@ function renderUnivLinks() {
       }
     };
   });
+  box.querySelectorAll("[data-qr-url]").forEach(btn => {
+    btn.onclick = () => openUniversityQR(btn.dataset.qrUniv, btn.dataset.qrUrl);
+  });
 }
+
+let activeQRUrl = "";
+async function openUniversityQR(univ, url) {
+  const overlay = $("qr-fullscreen"), canvas = $("qr-fullscreen-canvas");
+  activeQRUrl = url;
+  $("qr-fullscreen-title").textContent = `${univ} 学生用QRコード`;
+  $("qr-fullscreen-url").textContent = url;
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+  if (overlay.requestFullscreen && !document.fullscreenElement) overlay.requestFullscreen().catch(() => {});
+  try {
+    if (!window.qrcode) throw new Error("QRコード生成機能を読み込めませんでした");
+    const qr = window.qrcode(0, "M");
+    qr.addData(url); qr.make();
+    const count = qr.getModuleCount(), margin = 4;
+    const cell = Math.max(8, Math.floor(640 / (count + margin * 2)));
+    const size = (count + margin * 2) * cell;
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = "#17221d";
+    for (let row = 0; row < count; row++) for (let col = 0; col < count; col++) {
+      if (qr.isDark(row, col)) ctx.fillRect((col + margin) * cell, (row + margin) * cell, cell, cell);
+    }
+  } catch (e) {
+    $("qr-fullscreen-url").textContent = `QRコードの生成に失敗しました。${e.message || e}`;
+  }
+}
+async function closeUniversityQR() {
+  $("qr-fullscreen").classList.remove("open");
+  document.body.style.overflow = "";
+  if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+}
+$("qr-close-btn").onclick = closeUniversityQR;
+$("qr-copy-btn").onclick = async () => {
+  if (!activeQRUrl) return;
+  try {
+    await navigator.clipboard.writeText(activeQRUrl);
+    $("qr-copy-btn").textContent = "コピーしました";
+    setTimeout(() => { $("qr-copy-btn").textContent = "URLをコピー"; }, 1400);
+  } catch (e) { prompt("このリンクをコピーしてください", activeQRUrl); }
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("qr-fullscreen").classList.contains("open")) closeUniversityQR(); });
 
 function adminConfigPayload() {
   const admins = ADMIN_CONFIG.admins
