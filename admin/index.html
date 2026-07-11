@@ -232,7 +232,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.21</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.22</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -313,8 +313,9 @@
         <label>取込方法：<select id="roster-import-mode"><option value="replace">現在の名簿を置き換え</option><option value="append">現在の名簿に追加</option></select></label>
         <input id="roster-file-input" type="file" accept=".csv,text/csv,text/plain" style="display:none">
         <button id="roster-import-btn" class="primary">CSVをインポート</button>
-        <button id="roster-template-btn">CSV雛形を保存</button>
+        <button id="roster-template-btn">インポート用CSVをダウンロード</button>
       </div>
+      <p class="muted" style="margin:6px 0 0">テンプレートを開き、「学籍番号（大原登録番号）」の下に、1行に1名ずつ番号を入力して保存してください。</p>
       <div id="roster-summary" class="mini-stat-row"></div>
       <div id="roster-msg" class="muted"></div>
       <div id="roster-review-list" style="margin-top:10px"></div>
@@ -724,8 +725,10 @@ async function importRosterFile(e) {
   catch(err){ $("roster-msg").textContent="取込に失敗しました："+(err.code||err.message); }
 }
 function downloadRosterTemplate(){
-  const blob=new Blob(["\uFEFF学籍番号（大原登録番号）\n20260001\n20260002\n"],{type:"text/csv;charset=utf-8"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="学生番号名簿_雛形.csv"; a.click(); URL.revokeObjectURL(a.href);
+  const a=document.createElement("a");
+  a.href="templates/"+encodeURIComponent("学生番号名簿_インポート用.csv");
+  a.download="学生番号名簿_インポート用.csv";
+  a.click();
 }
 function rowByCode(code){ return ROWS.find(r=>r.code===code); }
 async function approveRosterRow(code){ const r=rowByCode(code); if(!r)return; await updateRosterConfig(c=>{const a=c.approvedByUniversity[r.univ]||[]; c.approvedByUniversity[r.univ]=[...new Set([...a,normalizeStudentId(r.sid)])];}); renderRosterReview(); }
