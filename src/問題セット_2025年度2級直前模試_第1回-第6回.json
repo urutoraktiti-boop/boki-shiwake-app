@@ -1,5 +1,8 @@
 {
+  "schemaVersion": 3,
   "name": "2025年度2級直前模試 第1回〜第6回",
+  "grade": 2,
+  "subject": "mixed",
   "description": "第1問の商業簿記5問と第4問(1)の工業簿記3問を各回から収録（全48問）",
   "questions": [
     {

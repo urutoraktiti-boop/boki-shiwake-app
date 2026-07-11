@@ -1,6 +1,8 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "2025年度3級直前模試 第1回〜第4回",
+  "grade": 3,
+  "subject": "commercial",
   "description": "第1問の仕訳問題15問を各回から収録（全60問）",
   "sources": [
     {

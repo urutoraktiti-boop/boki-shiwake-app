@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>簿記2級 仕訳トレーニング</title>
+<title>簿記 仕訳トレーニング</title>
 <style>
   :root{
     --primary:#1a5fb4; --primary-dark:#14497f; --bg:#f4f6f9; --card:#ffffff;
@@ -163,6 +163,10 @@
   .test-btn b{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:.98rem;}
   .test-btn small{color:var(--sub); opacity:1;}
   .test-btn.done{color:var(--primary-dark); background:#edf3ed; border-color:#8ea99d;}
+  .level-section{grid-column:1/-1; margin:10px 0 0; padding:7px 9px; border-left:5px solid; font-weight:700; font-size:.88rem; background:#faf7ef;}
+  .level-section.g3{border-color:#e5b900}.level-section.g2-commercial{border-color:#e88428}.level-section.g2-industrial{border-color:#4f9b62}
+  .level-badge{display:inline-block; padding:2px 7px; margin-bottom:6px; border:1px solid; border-radius:999px; font-size:.68rem; font-weight:700; color:#332f28;}
+  .level-badge.g3{background:#ffe88a;border-color:#d3ae00}.level-badge.g2-commercial{background:#ffd0a3;border-color:#df7b20}.level-badge.g2-industrial{background:#bfe2c5;border-color:#438b55}
   .small-btns{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;}
   .small-btns button,.small-act,button.ghost{color:var(--primary-dark); background:transparent; border:1px solid var(--primary); border-radius:2px;}
   button.main{background:var(--primary); color:#fffdf7; border-radius:2px; letter-spacing:.04em;}
@@ -212,7 +216,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.29配布版</span></h1>
+      <h1>簿記 仕訳トレーニング <span class="ver">v3.30配布版</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -402,6 +406,21 @@ store.meta ??= {};
 }
 function effCat(q){ return store.meta[q.id]?.category || q.category || "未分類"; }
 function effLabel(q){ return q.label || "問"+qNo(q); }
+function questionGrade(q){
+  if(Number(q.grade)===2||Number(q.grade)===3) return Number(q.grade);
+  return /3級|g3/.test(`${q.group||""} ${q.id||""}`)?3:2;
+}
+function questionSubject(q){
+  if(q.subject==="industrial"||q.section==="industrial"||/工業簿記|第4問/.test(`${q.group||""} ${q.category||""}`)) return "industrial";
+  return "commercial";
+}
+function questionTrack(q){ return questionGrade(q)===3?"g3":`g2-${questionSubject(q)}`; }
+function trackLabel(track){ return track==="g3"?"3級":track==="g2-industrial"?"2級・工業簿記":"2級・商業簿記"; }
+function groupTrack(group){ const q=allQ().find(x=>x.group===group); return q?questionTrack(q):"g2-commercial"; }
+function qidTrackBadges(qids){
+  const tracks=[...new Set((qids||[]).map(id=>allQ().find(q=>q.id===id)).filter(Boolean).map(questionTrack))];
+  return tracks.map(track=>`<span class="level-badge ${track}">${trackLabel(track)}</span>`).join(" ");
+}
 function setCat(qid,cat){
   store.meta[qid] ??= {};
   store.meta[qid].category=cat;
@@ -892,14 +911,20 @@ function updateHome(){
   /* 仕訳対策問題・直前模試の回別テストボタン */
   const groups=[...new Set(allQ().map(q=>q.group).filter(Boolean))];
   document.getElementById("no-groups").style.display = groups.length? "none" : "";
-  document.getElementById("group-btns").innerHTML = groups.map(g=>{
-    const tests=(store.tests||[]).filter(t=>t.group===g);
-    const last=tests[tests.length-1];
-    const cleared=last && last.score>=last.max*0.7;
-    return `<button class="test-btn ${cleared?'done':''}" onclick="openGroupPicker('${esc(g)}')">
-      <b>${esc(groupButtonLabel(g))}</b>
-      <small>${last? `直近 ${last.score}/${last.max}点` : "未挑戦"}</small>
-    </button>`;
+  const order=["g3","g2-commercial","g2-industrial"];
+  document.getElementById("group-btns").innerHTML = order.map(track=>{
+    const trackGroups=groups.filter(g=>groupTrack(g)===track);
+    if(!trackGroups.length) return "";
+    return `<div class="level-section ${track}">${trackLabel(track)}</div>`+trackGroups.map(g=>{
+      const tests=(store.tests||[]).filter(t=>t.group===g);
+      const last=tests[tests.length-1];
+      const cleared=last && last.score>=last.max*0.7;
+      return `<button class="test-btn ${cleared?'done':''}" onclick="openGroupPicker('${esc(g)}')">
+        <span class="level-badge ${track}">${trackLabel(track)}</span>
+        <b>${esc(groupButtonLabel(g))}</b>
+        <small>${last? `直近 ${last.score}/${last.max}点` : "未挑戦"}</small>
+      </button>`;
+    }).join("");
   }).join("");
   renderAssignments();
 }
@@ -917,6 +942,7 @@ function renderAssignments(){
     const n=(a.qids||[]).filter(id=>known.has(id)).length;
     const cleared=last && last.max>0 && last.score>=last.max*0.7;
     return `<button class="test-btn ${cleared?'done':''}" onclick="startAssignment('${esc(a.id)}')">
+      <span>${qidTrackBadges(a.qids)}</span>
       <b>${esc(a.title||"課題")}</b>
       <small>${last? `直近 ${last.score}/${last.max}点` : (n+"問・未挑戦")}</small>
     </button>`;
@@ -1427,7 +1453,7 @@ function exportQuestionsPDF(){
  .bar{margin:0 0 8px;}
  @media print{.bar{display:none}}
 </style></head><body>
-<h1>簿記2級 仕訳問題一覧管理表（${new Date().toLocaleDateString("ja-JP")}・全${rows.length}問）</h1>
+<h1>簿記 仕訳問題一覧管理表（${new Date().toLocaleDateString("ja-JP")}・全${rows.length}問）</h1>
 <div class="bar"><button onclick="window.print()">🖨 印刷 / PDFとして保存</button></div>
 <table><tr>${head.map(h=>`<th>${hEsc(h)}</th>`).join("")}</tr>
 ${rows.map(r=>`<tr>${head.map(k=>`<td>${hEsc(r[k])}</td>`).join("")}</tr>`).join("")}
@@ -1487,7 +1513,7 @@ function buildReportHTML(){
  }
 </style></head><body><div class="app">
  <header>
-   <h1>簿記2級 仕訳トレーニング 成績報告</h1>
+   <h1>簿記 仕訳トレーニング 成績報告</h1>
    <p>${esc(rep.大学名)}　学籍番号：${esc(rep.学籍番号)}　出力日時：${esc(rep.出力日時)}</p>
  </header>
  <div class="no-print" style="text-align:right; margin-bottom:10px"><button class="ghost" onclick="window.print()">🖨 印刷 / PDFとして保存</button></div>
@@ -1723,6 +1749,10 @@ function installSet(data,fname){
   if(!data || !Array.isArray(data.questions) || !data.questions.length)
     throw new Error("questions 配列が見つかりません");
   const name=data.name || fname.replace(/\.json$/i,"");
+  const setGrade=Number(data.grade);
+  const setSubject=data.subject;
+  if(![2,3].includes(setGrade)) throw new Error("級の情報 grade が必要です（2 または 3）");
+  if(!["commercial","industrial","mixed"].includes(setSubject)) throw new Error("科目の情報 subject が必要です（commercial / industrial / mixed）");
   if(store.sets.some(s=>s.name===name) && !confirm(`「${name}」は既に追加されています。上書きしますか？`)) return;
   const setKey=name.replace(/\s+/g,"_");
   const qs=data.questions.map((q,i)=>{
@@ -1734,7 +1764,9 @@ function installSet(data,fname){
     });
     const d=q.debit.reduce((a,[,x])=>a+x,0), c=q.credit.reduce((a,[,x])=>a+x,0);
     if(d!==c) throw new Error(`${i+1}問目：貸借が一致しません（借方${d.toLocaleString()}／貸方${c.toLocaleString()}）`);
-    return {...q, id:q.questionId||q.id||`${setKey}_q${i+1}`, topic:q.topic||"", expl:q.expl||"", explanationImages:Array.isArray(q.explanationImages)?q.explanationImages:[]};
+    const subject=q.subject||q.section||(setSubject==="mixed"?(/工業簿記|第4問/.test(`${q.group||""} ${q.category||""}`)?"industrial":"commercial"):setSubject);
+    if(!["commercial","industrial"].includes(subject)) throw new Error(`${i+1}問目の科目を判定できません`);
+    return {...q, grade:Number(q.grade)||setGrade, subject, id:q.questionId||q.id||`${setKey}_q${i+1}`, topic:q.topic||"", expl:q.expl||"", explanationImages:Array.isArray(q.explanationImages)?q.explanationImages:[]};
   });
   store.sets=store.sets.filter(s=>s.name!==name);
   store.sets.push({name, questions:qs, installedAt:new Date().toISOString().slice(0,10)});
@@ -1760,6 +1792,9 @@ function startSet(i){
 function downloadTemplate(){
   const tpl={
     name:"（セット名：例）2026.07.07 確認テスト",
+    schemaVersion:3,
+    grade:2,
+    subject:"commercial",
     categories_available:CATEGORIES,
     questions:[{
       label:"（必須）問題番号タイトル 例：2026.07.07 問1",
@@ -1787,12 +1822,17 @@ function installBundledSets(){
     if(!store.sets.some(x=>x.name===s.name)){
       try{
         const setKey=s.name.replace(/\s+/g,"_");
-        const qs=s.questions.map((q,i)=>({...q, id:q.questionId||q.id||`${setKey}_q${i+1}`}));
+        const setGrade=/3級/.test(s.name)?3:2;
+        const qs=s.questions.map((q,i)=>({...q, grade:Number(q.grade)||setGrade, subject:q.subject||q.section||(/工業簿記|第4問/.test(`${q.group||""} ${q.category||""}`)?"industrial":"commercial"), id:q.questionId||q.id||`${setKey}_q${i+1}`}));
         store.sets.push({name:s.name, questions:qs, installedAt:new Date().toISOString().slice(0,10)});
         changed=true;
       }catch(e){}
     }
   });
+  store.sets.forEach(s=>s.questions.forEach(q=>{
+    const grade=questionGrade(q), subject=questionSubject(q);
+    if(q.grade!==grade||q.subject!==subject){ q.grade=grade; q.subject=subject; changed=true; }
+  }));
   if(changed) localStorage.setItem(KEY,JSON.stringify(store));
   return changed;
 }
