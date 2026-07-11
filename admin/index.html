@@ -232,7 +232,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記2級 学習記録管理 <span class="ver">v1.22</span></h1>
+      <h1>簿記2級 学習記録管理 <span class="ver">v1.23</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -318,7 +318,8 @@
       <p class="muted" style="margin:6px 0 0">テンプレートを開き、「学籍番号（大原登録番号）」の下に、1行に1名ずつ番号を入力して保存してください。</p>
       <div id="roster-summary" class="mini-stat-row"></div>
       <div id="roster-msg" class="muted"></div>
-      <div id="roster-review-list" style="margin-top:10px"></div>
+      <button id="roster-review-toggle" class="result-section-toggle" type="button"><span>照合結果の学生一覧</span><span>表示する ▼</span></button>
+      <div id="roster-review-list" style="display:none; margin-top:10px"></div>
     </div>
 
     <div class="card" id="group-settings">
@@ -442,6 +443,7 @@ let PUBLICATION_DEFS = [];
 let editingPublicationId = null;
 let GROUP_CONFIG = { groupsByUniversity:{} };
 let ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{} };
+let rosterReviewOpen = false;
 
 /* ===== 認証 ===== */
 $("login-btn").onclick = async () => {
@@ -673,10 +675,11 @@ function renderRosterSettings() {
   const previous = univs.includes(select.value) ? select.value : (univs[0] || "");
   select.innerHTML = univs.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
   select.value = previous;
-  select.onchange = renderRosterReview;
+  select.onchange = () => { rosterReviewOpen=false; renderRosterReview(); };
   $("roster-import-btn").onclick = () => $("roster-file-input").click();
   $("roster-file-input").onchange = importRosterFile;
   $("roster-template-btn").onclick = downloadRosterTemplate;
+  $("roster-review-toggle").onclick = () => { rosterReviewOpen=!rosterReviewOpen; renderRosterReview(); };
   renderRosterReview();
 }
 function renderRosterReview() {
@@ -689,18 +692,21 @@ function renderRosterReview() {
   $("roster-summary").innerHTML = [
     ["正規名簿",rosterCount+"名"],["アプリ登録",students.length+"名"],["確認済み",counts.ok+"名"],["要確認",counts.warn+"名"],["利用停止",counts.off+"名"]
   ].map(([l,n])=>`<div class="mini-stat"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join("");
+  const toggle=$("roster-review-toggle"), listBox=$("roster-review-list");
+  toggle.innerHTML=`<span>照合結果の学生一覧（${students.length}名）</span><span>${rosterReviewOpen?"閉じる ▲":"表示する ▼"}</span>`;
+  listBox.style.display=rosterReviewOpen?"":"none";
   const order={warn:0,off:1,none:2,ok:3};
   const sorted=students.slice().sort((a,b)=>order[rosterStatus(a).key]-order[rosterStatus(b).key]||a.sid.localeCompare(b.sid,"ja"));
-  $("roster-review-list").innerHTML = sorted.length ? sorted.map(r=>{
+  listBox.innerHTML = sorted.length ? sorted.map(r=>{
     const state=rosterStatus(r);
     const actions=state.key==="warn" ? `<button data-roster-approve="${esc(r.code)}">正規学生として承認</button><button data-roster-suspend="${esc(r.code)}">利用停止</button><button data-roster-delete="${esc(r.code)}">利用停止して削除</button>`
       : state.key==="off" ? `<button data-roster-resume="${esc(r.code)}">利用を再開</button><button data-roster-delete="${esc(r.code)}">記録を削除</button>` : "";
     return `<div class="roster-row"><div><b>${esc(r.sid)}</b><br><span class="muted">最終更新 ${r.updatedAt?new Date(r.updatedAt).toLocaleDateString("ja-JP"):"―"}</span></div><span class="roster-state roster-${state.key}">${state.label}</span><div class="roster-actions">${actions}</div></div>`;
   }).join("") : `<p class="muted">この大学のアプリ登録者はまだいません。</p>`;
-  $("roster-review-list").querySelectorAll("[data-roster-approve]").forEach(b=>b.onclick=()=>approveRosterRow(b.dataset.rosterApprove));
-  $("roster-review-list").querySelectorAll("[data-roster-suspend]").forEach(b=>b.onclick=()=>suspendRosterRow(b.dataset.rosterSuspend));
-  $("roster-review-list").querySelectorAll("[data-roster-resume]").forEach(b=>b.onclick=()=>resumeRosterRow(b.dataset.rosterResume));
-  $("roster-review-list").querySelectorAll("[data-roster-delete]").forEach(b=>b.onclick=()=>deleteRosterRow(b.dataset.rosterDelete));
+  listBox.querySelectorAll("[data-roster-approve]").forEach(b=>b.onclick=()=>approveRosterRow(b.dataset.rosterApprove));
+  listBox.querySelectorAll("[data-roster-suspend]").forEach(b=>b.onclick=()=>suspendRosterRow(b.dataset.rosterSuspend));
+  listBox.querySelectorAll("[data-roster-resume]").forEach(b=>b.onclick=()=>resumeRosterRow(b.dataset.rosterResume));
+  listBox.querySelectorAll("[data-roster-delete]").forEach(b=>b.onclick=()=>deleteRosterRow(b.dataset.rosterDelete));
 }
 function parseRosterCSV(text) {
   const lines=String(text||"").replace(/^\uFEFF/,"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
