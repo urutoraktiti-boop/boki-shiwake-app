@@ -210,7 +210,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.22配布版</span></h1>
+      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.23配布版</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -259,7 +259,8 @@
         <div id="profile-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
           <select id="univ-select" style="flex:1.2; min-width:150px" onchange="document.getElementById('univ-other').style.display=this.value==='__other__'?'':'none'"></select>
           <input type="text" id="univ-other" placeholder="大学名を入力" style="flex:1; min-width:130px; display:none">
-          <input type="text" id="sid-input" placeholder="学籍番号" style="flex:1; min-width:110px">
+          <input type="text" id="sid-input" placeholder="学籍番号（大原登録番号）" style="flex:1; min-width:180px">
+          <input type="text" id="group-input" placeholder="グループ番号（任意）" style="flex:1; min-width:150px">
           <button class="small-act" onclick="saveProfile()">保存</button>
           <button class="small-act" id="profile-cancel" style="display:none" onclick="cancelProfileEdit()">キャンセル</button>
         </div>
@@ -462,9 +463,11 @@ function setProfileInputs(p){
   sel.innerHTML=univOptionsHTML();
   const other=document.getElementById("univ-other");
   const sid=document.getElementById("sid-input");
+  const group=document.getElementById("group-input");
   const fixed=fixedUniversity();
   if(other){ other.style.display="none"; other.value=""; }
   if(sid) sid.value="";
+  if(group) group.value="";
   if(fixed){
     sel.innerHTML=`<option value="${esc(fixed)}">${esc(fixed)}</option>`;
     sel.value=fixed;
@@ -475,6 +478,7 @@ function setProfileInputs(p){
     else if(UNIVERSITIES.includes(p.univ)) sel.value=p.univ;
     else if(p.univ && other){ sel.value="__other__"; other.style.display=""; other.value=p.univ; }
     if(sid) sid.value=p.sid||"";
+    if(group) group.value=p.group||"";
   }
 }
 function initProfile(){
@@ -493,7 +497,7 @@ function renderProfileArea(){
     current.style.display="";
     current.innerHTML=`
       <div style="font-size:.85rem; color:var(--sub); margin-bottom:4px">現在の登録情報</div>
-      <div style="font-weight:700; margin-bottom:8px">${esc(p.univ)}｜${esc(p.sid)}</div>
+      <div style="font-weight:700; margin-bottom:8px">${esc(p.univ)}｜${esc(p.sid)}${p.group ? `｜グループ ${esc(p.group)}` : ""}</div>
       <button class="small-act" onclick="startProfileEdit()">ユーザー情報を修正する</button>
       <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">修正しても同期コードは変わりません。管理者画面には次回同期後、新しい大学名・学籍番号で表示されます。</small>
       ${fixedUniversity() && p.univ!==fixedUniversity() ? `<small style="display:block; color:var(--ng); font-size:.72rem; margin-top:6px">このリンクは「${esc(fixedUniversity())}」専用です。大学名を直す場合は「ユーザー情報を修正する」から保存してください。</small>` : ""}`;
@@ -542,11 +546,12 @@ function requireProfile(){
   bg.className="modal-bg";
   bg.innerHTML=`<div class="modal">
        <h3 style="margin-top:0">はじめに登録してください</h3>
-       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、${fixed ? "あなたの<b>学籍番号</b>" : "あなたの<b>大学</b>と<b>学籍番号</b>"}を登録してください。（あとで「設定 → データ保存・引き継ぎ」から修正できます）</div>
+       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、${fixed ? "あなたの<b>学籍番号（大原登録番号）</b>" : "あなたの<b>大学</b>と<b>学籍番号（大原登録番号）</b>"}を登録してください。グループ番号は任意です。（あとで「設定 → データ保存・引き継ぎ」から修正できます）</div>
        ${fixedUniversityNotice()}
        <div style="display:flex; flex-direction:column; gap:8px">
          ${fixed ? `<input type="hidden" id="req-univ" value="${esc(fixed)}"><input type="hidden" id="req-other" value="">` : `<select id="req-univ" onchange="document.getElementById('req-other').style.display=this.value==='__other__'?'':'none'">${univOptionsHTML()}</select><input type="text" id="req-other" placeholder="大学名を入力" style="display:none">`}
-         <input type="text" id="req-sid" placeholder="学籍番号">
+         <input type="text" id="req-sid" placeholder="学籍番号（大原登録番号）">
+         <input type="text" id="req-group" placeholder="グループ番号（任意）">
          <button class="main" id="req-save" style="width:100%; margin-top:4px">登録する</button>
        </div>
        <div style="border-top:1px solid var(--line); margin-top:14px; padding-top:12px">
@@ -562,7 +567,8 @@ function requireProfile(){
     const sel=bg.querySelector("#req-univ");
     const univ=sel.value==="__other__"? bg.querySelector("#req-other").value.trim() : sel.value;
     const sid=bg.querySelector("#req-sid").value.trim();
-    if(commitProfile(univ,sid)){ bg.remove(); initProfile(); refreshDataToggle(); updateHome(); }
+    const group=bg.querySelector("#req-group").value.trim();
+    if(commitProfile(univ,sid,group)){ bg.remove(); initProfile(); refreshDataToggle(); updateHome(); }
   };
   bg.querySelector("#req-restore").onclick=async ()=>{
     const code=bg.querySelector("#req-code").value;
@@ -577,11 +583,11 @@ function requireProfile(){
     }
   };
 }
-function commitProfile(univ,sid){
+function commitProfile(univ,sid,group=""){
   const fixed=fixedUniversity();
   if(fixed) univ=fixed;
   if(!univ||!sid){ alert("大学名と学籍番号を入力してください。"); return false; }
-  store.profile={univ,sid}; saveStore(store); showProfileStatus();
+  store.profile={univ,sid,group:String(group||"").trim()}; saveStore(store); showProfileStatus();
   ensureSyncCode();      /* 登録したら自動で同期コードを発行しクラウドへ（管理者ダッシュボードに自動で出る） */
   renderAssignments();   /* 大学・学籍番号が変わると対象の課題も変わるため再描画 */
   updateHome();          /* 問題公開設定も新しい大学・学籍番号で再評価 */
@@ -605,7 +611,8 @@ function saveProfile(){
   const fixed=fixedUniversity();
   const univ=fixed || (sel.value==="__other__"? document.getElementById("univ-other").value.trim() : sel.value);
   const sid=document.getElementById("sid-input").value.trim();
-  if(!commitProfile(univ,sid)) return;
+  const group=document.getElementById("group-input").value.trim();
+  if(!commitProfile(univ,sid,group)) return;
   alert("✅ 保存しました");
   profileEditOpen=false;
   renderProfileArea();
@@ -641,6 +648,7 @@ async function cloudSave(){
       data:{stringValue:JSON.stringify({history:store.history,sets:store.sets,meta:store.meta,tests:store.tests,profile:store.profile,updatedAt:store.updatedAt})},
       univ:{stringValue:store.profile?.univ||""},
       sid:{stringValue:store.profile?.sid||""},
+      group:{stringValue:store.profile?.group||""},
       updatedAt:{integerValue:String(store.updatedAt||Date.now())}
     }};
     const r=await fetch(syncURL(store.sync.code),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
