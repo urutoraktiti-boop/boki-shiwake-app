@@ -1,5 +1,8 @@
 {
+  "schemaVersion": 3,
   "name": "第1問特集①〜⑨",
+  "grade": 2,
+  "subject": "commercial",
   "questions": [
     {
       "label": "特集① 問1",

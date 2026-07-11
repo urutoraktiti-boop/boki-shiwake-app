@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>簿記2級 仕訳トレーニング</title>
+<title>簿記 仕訳トレーニング</title>
 <style>
   :root{
     --primary:#1a5fb4; --primary-dark:#14497f; --bg:#f4f6f9; --card:#ffffff;
@@ -212,7 +212,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.29</span></h1>
+      <h1>簿記 仕訳トレーニング <span class="ver">v3.30</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -1427,7 +1427,7 @@ function exportQuestionsPDF(){
  .bar{margin:0 0 8px;}
  @media print{.bar{display:none}}
 </style></head><body>
-<h1>簿記2級 仕訳問題一覧管理表（${new Date().toLocaleDateString("ja-JP")}・全${rows.length}問）</h1>
+<h1>簿記 仕訳問題一覧管理表（${new Date().toLocaleDateString("ja-JP")}・全${rows.length}問）</h1>
 <div class="bar"><button onclick="window.print()">🖨 印刷 / PDFとして保存</button></div>
 <table><tr>${head.map(h=>`<th>${hEsc(h)}</th>`).join("")}</tr>
 ${rows.map(r=>`<tr>${head.map(k=>`<td>${hEsc(r[k])}</td>`).join("")}</tr>`).join("")}
@@ -1487,7 +1487,7 @@ function buildReportHTML(){
  }
 </style></head><body><div class="app">
  <header>
-   <h1>簿記2級 仕訳トレーニング 成績報告</h1>
+   <h1>簿記 仕訳トレーニング 成績報告</h1>
    <p>${esc(rep.大学名)}　学籍番号：${esc(rep.学籍番号)}　出力日時：${esc(rep.出力日時)}</p>
  </header>
  <div class="no-print" style="text-align:right; margin-bottom:10px"><button class="ghost" onclick="window.print()">🖨 印刷 / PDFとして保存</button></div>
