@@ -212,7 +212,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.28</span></h1>
+      <h1>簿記2級 仕訳学習手帳 <span class="ver">v3.29</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -235,7 +235,7 @@
       <div id="assignment-btns" class="test-grid"></div>
     </div>
     <div class="card">
-      <div class="side-title" style="margin-top:0"><span class="journal-label">TODAY'S PRACTICE</span>回答テスト（20点満点）</div>
+      <div class="side-title" style="margin-top:0"><span class="journal-label">TODAY'S PRACTICE</span>回答テスト・直前模試</div>
       <div id="group-btns" class="test-grid"></div>
       <div id="no-groups" class="empty" style="display:none; padding:14px 0">問題セットが読み込まれていません（管理者にご連絡ください）</div>
     </div>
@@ -347,13 +347,16 @@ store.sets ??= [];
 let PUBLICATIONS=[];
 let PUBLICATIONS_READY=false;
 let publicationRefreshTimer=null;
-/* 2025年度直前模試48問は、管理者が公開設定を作るまで生徒に表示しない */
-const CONTROLLED_QIDS=new Set(
-  Array.from({length:6},(_,i)=>i+1).flatMap(r=>[
+/* 2025年度2級直前模試48問・3級直前模試60問は、管理者が公開設定を作るまで生徒に表示しない */
+const CONTROLLED_QIDS=new Set([
+  ...Array.from({length:6},(_,i)=>i+1).flatMap(r=>[
     ...Array.from({length:5},(_,i)=>`2025-mock-r${r}-commercial-q${i+1}`),
     ...Array.from({length:3},(_,i)=>`2025-mock-r${r}-industrial-q${i+1}`)
-  ])
-);
+  ]),
+  ...Array.from({length:4},(_,i)=>i+1).flatMap(r=>
+    Array.from({length:15},(_,i)=>`2025-g3-mock-r${r}-commercial-q${i+1}`)
+  )
+]);
 try{
   const cached=JSON.parse(localStorage.getItem(PUBLICATION_CACHE_KEY)||"null");
   if(cached && Array.isArray(cached.publications)){
@@ -833,7 +836,8 @@ async function restoreByCode(code){
     if(!remote){ alert("このコードの記録が見つかりませんでした。入力ミスがないかご確認ください。"); setSyncStatus(""); return false; }
     if(store.history.length && !confirm("この端末の記録をクラウドの記録で置き換えます。よろしいですか？")){ setSyncStatus(""); return false; }
     store={history:remote.history||[], sets:remote.sets||[], meta:remote.meta||{}, tests:remote.tests||[], profile:remote.profile||null, sync:{code, lastSync:Date.now()}, updatedAt:remote.updatedAt||Date.now()};
-    localStorage.setItem(KEY,JSON.stringify(store));
+    installBundledSets();
+    saveStore(store);
     initProfile(); updateHome(); renderSync();
     alert("復元しました。以後この端末は自動で同期されます。");
     return true;
@@ -852,11 +856,20 @@ async function initSync(){
     if(remote && (remote.updatedAt||0) > (store.updatedAt||0)){
       const code=store.sync.code;
       store={history:remote.history||[], sets:remote.sets||[], meta:remote.meta||{}, tests:remote.tests||[], profile:remote.profile||null, sync:{code, lastSync:Date.now()}, updatedAt:remote.updatedAt};
-      localStorage.setItem(KEY,JSON.stringify(store));
+      installBundledSets();
+      saveStore(store);
       initProfile(); updateHome(); renderSync();
       setSyncStatus("✅ クラウドの最新記録を取り込みました");
     }
   }catch(e){ setSyncStatus("⚠ 同期確認に失敗（オフラインでも学習は継続できます）"); }
+}
+
+function groupButtonLabel(group){
+  const legacy=String(group).match(/^仕訳対策問題([①-⑨⑩-⑳])$/);
+  if(legacy) return `テスト${legacy[1]}`;
+  const mock=String(group).match(/^2025年度([23])級直前模試 第(\d+)回・(.+)$/);
+  if(mock) return `${mock[1]}級模試 第${mock[2]}回・${mock[3]}`;
+  return String(group);
 }
 
 function updateHome(){
@@ -876,16 +889,15 @@ function updateHome(){
   allQ().forEach(q=>{ counts[effCat(q)]=(counts[effCat(q)]||0)+1; });
   document.getElementById("cat-select").innerHTML =
     Object.entries(counts).map(([c,n])=>`<option value="${esc(c)}">${esc(c)}（${n}問）</option>`).join("");
-  /* 回答テスト①〜⑨のメインボタン */
+  /* 仕訳対策問題・直前模試の回別テストボタン */
   const groups=[...new Set(allQ().map(q=>q.group).filter(Boolean))];
   document.getElementById("no-groups").style.display = groups.length? "none" : "";
   document.getElementById("group-btns").innerHTML = groups.map(g=>{
     const tests=(store.tests||[]).filter(t=>t.group===g);
     const last=tests[tests.length-1];
-    const maru=(g.match(/[①-⑨⑩-⑳]/)||[""])[0];
     const cleared=last && last.score>=last.max*0.7;
     return `<button class="test-btn ${cleared?'done':''}" onclick="openGroupPicker('${esc(g)}')">
-      <b>テスト${maru||""}</b>
+      <b>${esc(groupButtonLabel(g))}</b>
       <small>${last? `直近 ${last.score}/${last.max}点` : "未挑戦"}</small>
     </button>`;
   }).join("");
@@ -1634,7 +1646,7 @@ function groupDashboard(){
       <button class="retry-chip" style="border-color:var(--primary); color:var(--primary)" onclick="openGroupPicker('${esc(g)}')">挑戦</button>
     </div>`;
   }).join("");
-  return `<div class="card"><div class="side-title" style="margin-top:0">回別テスト成績（20点満点・棒グラフは挑戦ごとの得点）</div>${rows}</div>`;
+  return `<div class="card"><div class="side-title" style="margin-top:0">回別テスト成績（棒グラフは挑戦ごとの得点）</div>${rows}</div>`;
 }
 function retryOne(qid){
   const q=allQ().find(x=>x.id===qid);
@@ -1767,17 +1779,24 @@ function downloadTemplate(){
   a.click(); URL.revokeObjectURL(a.href);
 }
 
-/* 同梱セットの自動インストール（既に同名セットがあればスキップ） */
-BUNDLED_SETS.forEach(s=>{
-  if(!store.sets.some(x=>x.name===s.name)){
-    try{
-      const setKey=s.name.replace(/\s+/g,"_");
-      const qs=s.questions.map((q,i)=>({...q, id:q.questionId||q.id||`${setKey}_q${i+1}`}));
-      store.sets.push({name:s.name, questions:qs, installedAt:new Date().toISOString().slice(0,10)});
-      localStorage.setItem(KEY,JSON.stringify(store));
-    }catch(e){}
-  }
-});
+/* 同梱セットの自動インストール（既に同名セットがあればスキップ）。
+   クラウド復元後にも呼び、古い同期データで新しい同梱セットが消えないようにする。 */
+function installBundledSets(){
+  let changed=false;
+  BUNDLED_SETS.forEach(s=>{
+    if(!store.sets.some(x=>x.name===s.name)){
+      try{
+        const setKey=s.name.replace(/\s+/g,"_");
+        const qs=s.questions.map((q,i)=>({...q, id:q.questionId||q.id||`${setKey}_q${i+1}`}));
+        store.sets.push({name:s.name, questions:qs, installedAt:new Date().toISOString().slice(0,10)});
+        changed=true;
+      }catch(e){}
+    }
+  });
+  if(changed) localStorage.setItem(KEY,JSON.stringify(store));
+  return changed;
+}
+installBundledSets();
 
 /* 配布版（問題同梱）では問題セット・分野の管理は非表示（管理者はマスター版で編集） */
 if(BUNDLED_SETS.length>0){ const mw=document.getElementById("manage-wrap"); if(mw) mw.style.display="none"; }
