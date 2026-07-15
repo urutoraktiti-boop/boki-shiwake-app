@@ -251,7 +251,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記 仕訳トレーニング管理 <span class="ver">v1.27</span></h1>
+      <h1>簿記 仕訳トレーニング管理 <span class="ver">v1.28</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -286,7 +286,7 @@
     <div id="summary" class="stat-row"></div>
     <div class="card" id="university-links">
       <div class="sec-title">🏫 大学別の告知リンク</div>
-      <p class="muted" style="margin-top:0">大学ごとのURLを学生に案内すると、学生側では大学名が固定され、学籍番号だけを入力する形になります。QRコードを作る場合は、このURLを使ってください。</p>
+      <p class="muted" style="margin-top:0">大学ごとのURLを学生に案内すると、大学名と学校コードが固定されます。学生は学籍番号・暗証番号・アプリIDを入力します。QRコードを作る場合は、このURLを使ってください。</p>
       <div id="univ-link-list" class="link-grid"></div>
     </div>
     <div class="card" id="admin-settings-card" style="display:none">
@@ -310,7 +310,7 @@
           <select id="univ-filter"><option value="">すべて</option></select>
         </label>
         <label>検索：
-          <input id="search-box" type="text" placeholder="学籍番号で絞り込み" style="width:160px">
+          <input id="search-box" type="text" placeholder="学籍番号・アプリIDで検索" style="width:190px">
         </label>
         <button id="reload-btn">🔄 再読み込み</button>
         <button id="csv-btn">⬇ CSV書き出し</button>
@@ -465,12 +465,12 @@ const ADMIN_URL = "https://urutoraktiti-boop.github.io/boki-shiwake-app/admin/";
 /* 大学の選択肢（生徒アプリの UNIVERSITIES と一致。生徒未登録の大学も選べるように固定リストを用意） */
 const UNIVERSITIES = ["学習院大学", "日本大学経済学部", "日本大学商学部", "東洋大学", "駒澤大学", "専修大学"];
 const UNIVERSITY_LINKS = [
-  { code:"gakushuin", name:"学習院大学" },
-  { code:"nichidai-econ", name:"日本大学経済学部" },
-  { code:"nichidai-commerce", name:"日本大学商学部" },
-  { code:"toyo", name:"東洋大学" },
-  { code:"komazawa", name:"駒澤大学" },
-  { code:"senshu", name:"専修大学" }
+  { code:"gakushuin", displayCode:"GA", name:"学習院大学" },
+  { code:"nichidai-econ", displayCode:"NE", name:"日本大学経済学部" },
+  { code:"nichidai-commerce", displayCode:"NC", name:"日本大学商学部" },
+  { code:"toyo", displayCode:"TY", name:"東洋大学" },
+  { code:"komazawa", displayCode:"KZ", name:"駒澤大学" },
+  { code:"senshu", displayCode:"SS", name:"専修大学" }
 ];
 let META = [];          // [{qid, group, label, points, grade, subject}]
 function metaTrack(m){ return Number(m.grade)===3?"g3":`g2-${m.subject==="industrial"?"industrial":"commercial"}`; }
@@ -864,6 +864,9 @@ onAuthStateChanged(auth, async user => {
 /* ===== データ取得 ===== */
 function summarizeStudentRecord(snapshot, source, data, identity, groupSet) {
   const f=snapshot.data(), tests=Array.isArray(data.tests)?data.tests:[];
+  const univ=f.univ||data.profile?.univ||"（未登録）";
+  const appId=BokiIdentity.normalizeAppId(f.appId||data.profile?.appId||"");
+  const displayId=BokiIdentity.formatDisplayId(univ,appId,UNIVERSITY_LINKS);
   const best={}, assignBest={};
   tests.forEach(t=>{
     if(!t)return;
@@ -884,7 +887,7 @@ function summarizeStudentRecord(snapshot, source, data, identity, groupSet) {
   });
   return {
     code:snapshot.id, source, studentKey:identity.studentKey,
-    univ:f.univ||data.profile?.univ||"（未登録）", sid:f.sid||data.profile?.sid||"（未登録）",
+    univ, sid:f.sid||data.profile?.sid||"（未登録）", appId, displayId,
     updatedAt:Number(f.updatedAt||data.updatedAt||0), best, assignBest, attemptsTotal:tests.length,
     migratedTo:f.migratedTo||"", _data:data, _fields:f
   };
@@ -1005,15 +1008,18 @@ async function migrateCandidate(candidate){
     sources.sort((a,b)=>a.updatedAt-b.updatedAt);
     let merged={history:[],sets:[],meta:{},tests:[],updatedAt:0};
     sources.forEach(source=>{merged=BokiIdentity.mergeStores(merged,source.data);});
-    const profile={...(merged.profile||{}),univ:candidate.univ,sid:candidate.sid,group:merged.profile?.group||""};
+    const current=canonicalSnap.exists()?canonicalSnap.data():{};
+    const mergedAppId=BokiIdentity.normalizeAppId(merged.profile?.appId||current?.appId||"");
+    const appId=BokiIdentity.isValidAppId(mergedAppId)?mergedAppId:"";
+    const profile={...(merged.profile||{}),univ:candidate.univ,sid:candidate.sid,group:merged.profile?.group||"",appId};
     const identity=await studentIdentityFor(candidate.univ,candidate.sid);
     if(identity.studentKey!==candidate.studentKey)throw new Error("統合先の学生キーが一致しません。");
-    const current=canonicalSnap.exists()?canonicalSnap.data():{};
     const now=Date.now(); merged.profile=profile; merged.updatedAt=Math.max(Number(merged.updatedAt||0),now); merged.schemaVersion=2;
     const payload={
       studentKey:candidate.studentKey,data:JSON.stringify(merged),univ:profile.univ||candidate.univ,
       univCode:identity.univCode,sid:profile.sid||candidate.sid,sidNormalized:normalizeStudentId(profile.sid||candidate.sid),
-      group:profile.group||"",schemaVersion:2,createdAt:Number(current.createdAt||now),updatedAt:merged.updatedAt
+      group:profile.group||"",appId,displayId:appId?BokiIdentity.formatDisplayId(profile.univ,appId,UNIVERSITY_LINKS):"",
+      schemaVersion:2,createdAt:Number(current.createdAt||now),updatedAt:merged.updatedAt
     };
     if(current.pinSalt&&current.pinHash){payload.pinSalt=current.pinSalt;payload.pinHash=current.pinHash;payload.pinIterations=Number(current.pinIterations||BokiIdentity.PIN_ITERATIONS);}
     tx.set(canonicalRef,payload);
@@ -1074,7 +1080,7 @@ function renderUnivLinks() {
     const url = studentURLFor(u.code);
     const previewUrl = studentPreviewURLFor(u.code);
     return `<div class="link-card">
-      <b>${esc(u.name)}</b>
+      <b>${esc(u.name)}（学校コード ${esc(u.displayCode)}）</b>
       <span class="link-url">${esc(url)}</span>
       <button data-copy-link="${esc(url)}">リンクをコピー</button>
       <button class="qr-open-btn" data-qr-url="${esc(url)}" data-qr-univ="${esc(u.name)}">QRコードを表示</button>
@@ -1353,7 +1359,7 @@ function render() {
   const sq = $("search-box").value.trim().toLowerCase();
   let rows = ROWS.filter(r =>
     (!uf || r.univ === uf) &&
-    (!sq || r.sid.toLowerCase().includes(sq))
+    (!sq || r.sid.toLowerCase().includes(sq) || r.displayId.toLowerCase().includes(sq))
   );
 
   // ソート
@@ -1410,7 +1416,7 @@ function render() {
     }).join("");
     const upd = r.updatedAt ? new Date(r.updatedAt).toLocaleDateString("ja-JP", { month:"numeric", day:"numeric" }) : "–";
     return `<tr data-code="${esc(r.code)}">
-      <td class="univ name-col">${esc(r.univ)}<br><span class="muted">${esc(r.sid)}</span></td>
+      <td class="univ name-col">${esc(r.univ)}<br><b>${esc(r.displayId)}</b><br><span class="muted">${esc(r.sid)}</span></td>
       ${cells}
       <td><span class="badge-total">${totalBest(r)}</span></td>
       <td class="muted">${upd}</td>
@@ -1456,7 +1462,7 @@ function toggleDetail(tr, r) {
       <button class="row-del-btn" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; border-radius:8px; padding:6px 14px; font-size:.82rem; cursor:pointer">🗑 この記録を削除</button>
     </div>` : "";
   row.innerHTML = `<td colspan="99">
-    <div style="margin-bottom:6px"><b>${esc(r.univ)}｜${esc(r.sid)}</b>
+    <div style="margin-bottom:6px"><b>${esc(r.displayId)}｜${esc(r.univ)}｜${esc(r.sid)}</b>
       <span class="muted">（${r.source==="student"?"学生キー":"旧同期コード"}：${esc(r.code)}）</span></div>
     <div class="detail-grid">${chips}</div>
     ${deleteBlock}
@@ -2145,9 +2151,12 @@ function assignmentAnalytics(a, sourceRows = ROWS) {
   return { targeted, entries, qids, max, avgScore, avgTime, submitRate, qStats, byScore, byAttempts, bySpeed, byImprovement, review };
 }
 window.__assignmentAnalytics = assignmentAnalytics;
-function assignmentRankList(items, value, masked = false) {
+function rankingDisplayId(row) {
+  return row?.displayId||BokiIdentity.formatDisplayId(row?.univ||"",row?.appId||"",UNIVERSITY_LINKS);
+}
+function assignmentRankList(items, value) {
   if (!items.length) return `<p class="muted">該当する記録がありません。</p>`;
-  return `<ol class="ranking-list">${items.map(x => `<li><span>${esc(masked ? maskStudentId(x.r.sid) : x.r.sid)}<br><span class="muted">${esc(x.r.univ)}</span></span><span class="ranking-value">${value(x)}</span></li>`).join("")}</ol>`;
+  return `<ol class="ranking-list">${items.map(x => `<li><span>${esc(rankingDisplayId(x.r))}<br><span class="muted">${esc(x.r.univ)}</span></span><span class="ranking-value">${value(x)}</span></li>`).join("")}</ol>`;
 }
 
 /* 課題の結果（全体サマリー → 問題別 → ランキング → 学生別） */
@@ -2218,7 +2227,7 @@ window.__assignmentStudentListIsOpen = () => assignStudentListOpen;
 
 function slideRankRows(items, value) {
   if (!items.length) return `<p class="muted">該当する記録がありません。</p>`;
-  return `<ol>${items.map(x => `<li>${esc(maskStudentId(x.r.sid))}　${value(x)}</li>`).join("")}</ol>`;
+  return `<ol>${items.map(x => `<li>${esc(rankingDisplayId(x.r))}　${value(x)}</li>`).join("")}</ol>`;
 }
 window.__openAssignmentSlides = function(previewAssignment = null, previewRows = null) {
   const a = previewAssignment || ASSIGN_DEFS.find(x => x.id === openAssignResultId);
@@ -2309,10 +2318,10 @@ function toggleAssignStudentDetail(tr, r, a) {
 
 /* ===== CSV ===== */
 function toCSV() {
-  const head = ["大学", "学籍番号", ...GROUPS.map(shortLabel), "合計(最高)", "最終更新"];
+  const head = ["大学", "アプリID", "学籍番号", ...GROUPS.map(shortLabel), "合計(最高)", "最終更新"];
   const lines = [head];
   ROWS.forEach(r => {
-    const row = [r.univ, r.sid,
+    const row = [r.univ, r.displayId, r.sid,
       ...GROUPS.map(g => { const b = r.best[g]; return (b && b.score >= 0) ? `${b.score}/${b.max}` : ""; }),
       totalBest(r),
       r.updatedAt ? new Date(r.updatedAt).toLocaleString("ja-JP") : ""];

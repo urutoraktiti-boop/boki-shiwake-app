@@ -7,6 +7,8 @@
 
   const SCHEMA_VERSION = 2;
   const PIN_ITERATIONS = 120000;
+  const APP_ID_MIN_LENGTH = 2;
+  const APP_ID_MAX_LENGTH = 12;
 
   function normalizeStudentId(value) {
     return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, "").toUpperCase();
@@ -20,6 +22,38 @@
     const normalized = normalizeUniversity(university);
     const hit = (Array.isArray(links) ? links : []).find(item => normalizeUniversity(item && item.name) === normalized);
     return hit ? String(hit.code) : `other:${normalized.toUpperCase()}`;
+  }
+
+  function universityDisplayCode(university, links) {
+    const normalized = normalizeUniversity(university);
+    const hit = (Array.isArray(links) ? links : []).find(item => normalizeUniversity(item && item.name) === normalized);
+    const code = String(hit && (hit.displayCode || hit.schoolCode) || "OT").normalize("NFKC").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return code.slice(0, 4) || "OT";
+  }
+
+  function normalizeAppId(value) {
+    return String(value ?? "").normalize("NFKC").trim();
+  }
+
+  function isValidAppId(value) {
+    const normalized = normalizeAppId(value);
+    const length = Array.from(normalized).length;
+    return length >= APP_ID_MIN_LENGTH
+      && length <= APP_ID_MAX_LENGTH
+      && /^[ァ-ヺー0-9]+$/.test(normalized);
+  }
+
+  function appIdValidationMessage(value, sid) {
+    const normalized = normalizeAppId(value);
+    if (!isValidAppId(normalized)) return `アプリIDは全角カタカナと数字で、${APP_ID_MIN_LENGTH}～${APP_ID_MAX_LENGTH}文字以内にしてください。`;
+    if (normalizeStudentId(normalized) === normalizeStudentId(sid)) return "アプリIDには学籍番号と異なる文字を設定してください。";
+    return "";
+  }
+
+  function formatDisplayId(university, appId, links) {
+    const normalized = normalizeAppId(appId);
+    if (!isValidAppId(normalized)) return `${universityDisplayCode(university, links)}-ミセッテイ`;
+    return `${universityDisplayCode(university, links)}-${normalized}`;
   }
 
   function bytesToHex(bytes) {
@@ -187,9 +221,16 @@
   return {
     SCHEMA_VERSION,
     PIN_ITERATIONS,
+    APP_ID_MIN_LENGTH,
+    APP_ID_MAX_LENGTH,
     normalizeStudentId,
     normalizeUniversity,
     universityCode,
+    universityDisplayCode,
+    normalizeAppId,
+    isValidAppId,
+    appIdValidationMessage,
+    formatDisplayId,
     sha256Hex,
     studentIdentity,
     createPinVerifier,

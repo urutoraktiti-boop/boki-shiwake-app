@@ -1,4 +1,4 @@
-const CACHE_NAME="boki-shiwake-v3.31";
+const CACHE_NAME="boki-shiwake-v3.32";
 const APP_SHELL=[
   "./",
   "./index.html",

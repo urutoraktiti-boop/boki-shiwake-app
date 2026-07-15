@@ -46,6 +46,7 @@ service cloud.firestore {
     function validStudentRecord(studentKey) {
       return request.resource.data.keys().hasOnly([
                'studentKey', 'data', 'univ', 'univCode', 'sid', 'sidNormalized', 'group',
+               'appId', 'displayId',
                'pinSalt', 'pinHash', 'pinIterations', 'schemaVersion', 'createdAt', 'updatedAt',
                'migratedTo', 'migratedAt', 'redirectUniv', 'redirectSid'
              ])
@@ -57,6 +58,12 @@ service cloud.firestore {
              && request.resource.data.sidNormalized is string
              && request.resource.data.sidNormalized.size() > 0
              && request.resource.data.group is string
+             && ((!('appId' in request.resource.data) && !('displayId' in request.resource.data))
+                 || (request.resource.data.appId is string
+                     && request.resource.data.displayId is string
+                     && ((request.resource.data.appId == '' && request.resource.data.displayId == '')
+                         || (request.resource.data.appId.matches('^[ァ-ヺー0-9]{2,12}$')
+                             && request.resource.data.displayId.matches('^[A-Z0-9]{2,4}-[ァ-ヺー0-9]{2,12}$')))))
              && request.resource.data.schemaVersion == 2
              && request.resource.data.createdAt is int
              && request.resource.data.updatedAt is int;
