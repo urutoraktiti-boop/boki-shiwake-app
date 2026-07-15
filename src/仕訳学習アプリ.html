@@ -215,7 +215,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記 仕訳トレーニング <span class="ver">v3.31</span></h1>
+      <h1>簿記 仕訳トレーニング <span class="ver">v3.32</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -265,11 +265,15 @@
           <select id="univ-select" style="flex:1.2; min-width:150px" onchange="profileUniversityChanged(this)"></select>
           <input type="text" id="univ-other" placeholder="大学名を入力" style="flex:1; min-width:130px; display:none">
           <input type="text" id="sid-input" placeholder="学籍番号（大原登録番号）" style="flex:1; min-width:180px">
+          <div style="display:flex; flex:1; min-width:210px; align-items:stretch">
+            <span id="app-id-prefix" style="display:flex; align-items:center; padding:0 9px; border:1px solid var(--line); border-right:0; border-radius:8px 0 0 8px; background:#f3f8ff; font-weight:700">--</span>
+            <input type="text" id="app-id-input" maxlength="12" placeholder="アプリID（カタカナ＋数字）" onblur="this.value=BokiIdentity.normalizeAppId(this.value)" style="flex:1; min-width:0; border-radius:0 8px 8px 0">
+          </div>
           <select id="group-input" style="flex:1; min-width:150px"></select>
           <button class="small-act" onclick="saveProfile()">保存</button>
           <button class="small-act" id="profile-cancel" style="display:none" onclick="cancelProfileEdit()">キャンセル</button>
         </div>
-        <small id="profile-status" style="display:block; color:var(--sub); font-size:.75rem; margin-top:6px">大学名と学籍番号を設定すると、成績レポートに記載されます。</small>
+        <small id="profile-status" style="display:block; color:var(--sub); font-size:.75rem; margin-top:6px">大学・学籍番号・アプリIDを設定すると、別端末から同じ記録を開けます。</small>
         <div id="sync-area" style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px"></div>
         <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px">
           <div style="border:1px solid var(--line); border-radius:10px; padding:10px; background:#fafcfe">
@@ -449,12 +453,12 @@ const UNIVERSITIES=[
   "専修大学"
 ]; /* ←必要に応じて追加・変更可能 */
 const UNIVERSITY_LINKS=[
-  {code:"gakushuin", name:"学習院大学"},
-  {code:"nichidai-econ", name:"日本大学経済学部"},
-  {code:"nichidai-commerce", name:"日本大学商学部"},
-  {code:"toyo", name:"東洋大学"},
-  {code:"komazawa", name:"駒澤大学"},
-  {code:"senshu", name:"専修大学"}
+  {code:"gakushuin", displayCode:"GA", name:"学習院大学"},
+  {code:"nichidai-econ", displayCode:"NE", name:"日本大学経済学部"},
+  {code:"nichidai-commerce", displayCode:"NC", name:"日本大学商学部"},
+  {code:"toyo", displayCode:"TY", name:"東洋大学"},
+  {code:"komazawa", displayCode:"KZ", name:"駒澤大学"},
+  {code:"senshu", displayCode:"SS", name:"専修大学"}
 ]; /* 大学別QRコード用。URLに ?univ=gakushuin のように付けると大学名を固定する */
 const UNIVERSITY_ENTRY_KEY="boki2_university_entry";
 function fixedUniversity(){
@@ -476,7 +480,18 @@ function isAdminPreview(){
 }
 function fixedUniversityNotice(){
   const u=fixedUniversity();
-  return u ? `<div style="border:1px solid #cfe0f5; background:#f3f8ff; color:var(--primary-dark); border-radius:10px; padding:9px 10px; font-size:.86rem; margin-bottom:8px">所属大学：<b>${esc(u)}</b><br><span style="font-size:.76rem; color:var(--sub)">この大学専用リンクから開いているため、大学名は固定されています。</span></div>` : "";
+  return u ? `<div style="border:1px solid #cfe0f5; background:#f3f8ff; color:var(--primary-dark); border-radius:10px; padding:9px 10px; font-size:.86rem; margin-bottom:8px">所属大学：<b>${esc(u)}</b>（${esc(BokiIdentity.universityDisplayCode(u,UNIVERSITY_LINKS))}）<br><span style="font-size:.76rem; color:var(--sub)">この大学専用リンクから開いているため、大学名と学校コードは固定されています。</span></div>` : "";
+}
+function displayIdForProfile(profile){
+  return BokiIdentity.formatDisplayId(profile?.univ||"",profile?.appId||"",UNIVERSITY_LINKS);
+}
+function selectedProfileUniversity(){
+  const sel=document.getElementById("univ-select"),other=document.getElementById("univ-other");
+  return fixedUniversity()||(sel?.value==="__other__"?(other?.value||"").trim():(sel?.value||""));
+}
+function updateAppIdPrefix(){
+  const prefix=document.getElementById("app-id-prefix");
+  if(prefix)prefix.textContent=BokiIdentity.universityDisplayCode(selectedProfileUniversity(),UNIVERSITY_LINKS)+"-";
 }
 function univOptionsHTML(){
   return `<option value="">大学を選択</option>`
@@ -530,6 +545,7 @@ function profileUniversityChanged(sel){
   const other=document.getElementById("univ-other");
   if(other) other.style.display=sel.value==="__other__"?"":"none";
   updateProfileGroupOptions();
+  updateAppIdPrefix();
 }
 let profileEditOpen=false;
 function setProfileInputs(p){
@@ -537,10 +553,12 @@ function setProfileInputs(p){
   sel.innerHTML=univOptionsHTML();
   const other=document.getElementById("univ-other");
   const sid=document.getElementById("sid-input");
+  const appId=document.getElementById("app-id-input");
   const group=document.getElementById("group-input");
   const fixed=fixedUniversity();
   if(other){ other.style.display="none"; other.value=""; }
   if(sid) sid.value="";
+  if(appId) appId.value="";
   if(group) group.innerHTML=groupOptionsHTML(fixed||(p&&p.univ)||"",p&&p.group||"");
   if(fixed){
     sel.innerHTML=`<option value="${esc(fixed)}">${esc(fixed)}</option>`;
@@ -552,8 +570,10 @@ function setProfileInputs(p){
     else if(UNIVERSITIES.includes(p.univ)) sel.value=p.univ;
     else if(p.univ && other){ sel.value="__other__"; other.style.display=""; other.value=p.univ; }
     if(sid) sid.value=p.sid||"";
+    if(appId) appId.value=p.appId||"";
     if(group) group.value=p.group||"";
   }
+  updateAppIdPrefix();
 }
 function initProfile(){
   setProfileInputs(store.profile);
@@ -571,14 +591,15 @@ function renderProfileArea(){
     current.style.display="";
     current.innerHTML=`
       <div style="font-size:.85rem; color:var(--sub); margin-bottom:4px">現在の登録情報</div>
-      <div style="font-weight:700; margin-bottom:8px">${esc(p.univ)}｜${esc(p.sid)}</div>
+      <div style="font-weight:800; color:var(--primary-dark); font-size:1.05rem">${esc(displayIdForProfile(p))}</div>
+      <div style="font-size:.78rem; color:var(--sub); margin:3px 0 8px">${esc(p.univ)}｜学籍番号 ${esc(p.sid)}</div>
       <label for="profile-current-group" style="display:block; font-size:.78rem; color:var(--sub); margin-bottom:4px">グループ番号（任意）</label>
       <div style="display:flex; gap:6px; margin-bottom:8px">
         <select id="profile-current-group" style="flex:1; min-width:0">${groupOptionsHTML(p.univ,p.group||"")}</select>
         <button class="small-act" onclick="saveCurrentGroup()">グループ番号を保存</button>
       </div>
-      <button class="small-act" onclick="startProfileEdit()">ユーザー情報を修正する</button>
-      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">同じ大学・学籍番号を使えば、別の端末でも同じ学習記録を開けます。学籍番号を修正した場合は、修正先の記録と統合します。</small>
+      <button class="small-act" onclick="startProfileEdit()">登録情報・アプリIDを変更する</button>
+      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">アプリIDはランキングなどに表示され、後から変更できます。同じ大学・学籍番号を使えば、別の端末でも同じ学習記録を開けます。</small>
       ${fixedUniversity() && p.univ!==fixedUniversity() ? `<small style="display:block; color:var(--ng); font-size:.72rem; margin-top:6px">このリンクは「${esc(fixedUniversity())}」専用です。大学名を直す場合は「ユーザー情報を修正する」から保存してください。</small>` : ""}`;
     form.style.display="none";
     if(cancel) cancel.style.display="none";
@@ -587,7 +608,7 @@ function renderProfileArea(){
     current.style.display="none";
     form.style.display="flex";
     if(cancel) cancel.style.display=(p && p.univ && p.sid) ? "" : "none";
-    if(status) status.textContent=fixedUniversity() ? "大学名はこのリンクの大学で固定されます。学籍番号を確認して保存してください。" : (p ? "学籍番号を変更する場合は、変更先の6桁暗証番号を確認します。" : "大学名・学籍番号・6桁暗証番号を登録してください。");
+    if(status) status.textContent=fixedUniversity() ? "学校コードは自動で付きます。学籍番号とアプリIDを確認して保存してください。" : (p ? "アプリIDは全角カタカナと数字で変更できます。学籍番号変更時は暗証番号も確認します。" : "大学名・学籍番号・アプリID・6桁暗証番号を登録してください。");
   }
 }
 function startProfileEdit(){
@@ -604,7 +625,7 @@ async function saveCurrentGroup(){
   const p=store.profile;
   const input=document.getElementById("profile-current-group");
   if(!p || !input) return;
-  if(!await commitProfile(p.univ,p.sid,input.value)) return;
+  if(!await commitProfile(p.univ,p.sid,input.value,p.appId)) return;
   profileEditOpen=false;
   renderProfileArea();
   alert("✅ グループ番号を保存しました");
@@ -628,7 +649,7 @@ function toggleDataSettings(btn){
 /* 初回・新端末：大学＋学籍番号から同じ学生キーを作り、6桁暗証番号を確認する。 */
 function requireProfile(){
   if(isAdminPreview()) return;
-  if(store.profile?.univ && store.profile?.sid && store.identity?.studentKey && store.identity?.pinVerified) return;
+  if(store.profile?.univ && store.profile?.sid && BokiIdentity.isValidAppId(store.profile?.appId) && store.identity?.studentKey && store.identity?.pinVerified) return;
   if(document.getElementById("identity-modal")) return;
   const existing=store.profile&&store.profile.univ&&store.profile.sid ? store.profile : null;
   const submitLabel=existing?"以前の記録を引き継ぐ":"登録・記録を復元する";
@@ -637,12 +658,17 @@ function requireProfile(){
   bg.id="identity-modal"; bg.className="modal-bg";
   bg.innerHTML=`<div class="modal">
        <h3 style="margin-top:0">${existing?"これまでの学習記録を引き継ぎます":"登録・学習記録の復元"}</h3>
-       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">${existing?"新しく登録し直す必要はありません。表示されている学籍番号を確認してください。この画面が初めてなら新しい数字6桁を決め、すでに設定済みなら同じ暗証番号を入力します。":"以前利用した方は、これまでと同じ学籍番号を入力してください。初めて利用する方は、自分の学籍番号と数字6桁の暗証番号を登録します。"}</div>
-       ${existing?`<div style="border-left:4px solid var(--primary); background:#f3f8ff; padding:9px 10px; margin-bottom:10px; font-size:.8rem"><b>以前の登録</b><br>${esc(existing.univ)}｜${esc(existing.sid)}<br><span style="color:var(--sub)">端末内・旧クラウド・新クラウドの記録を統合します。</span></div>`:""}
+       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">${existing?"表示されている学籍番号を確認し、6桁暗証番号とアプリIDを登録してください。登録済みのアプリIDがクラウドにある場合は自動で復元されます。":"以前利用した方は同じ学籍番号を入力してください。初めて利用する方は、学籍番号・アプリID・数字6桁の暗証番号を登録します。"}</div>
+       ${existing?`<div style="border-left:4px solid var(--primary); background:#f3f8ff; padding:9px 10px; margin-bottom:10px; font-size:.8rem"><b>以前の登録</b><br>${esc(existing.univ)}｜${esc(existing.sid)}${BokiIdentity.isValidAppId(existing.appId)?`<br>アプリID：${esc(displayIdForProfile(existing))}`:""}<br><span style="color:var(--sub)">端末内・旧クラウド・新クラウドの記録を統合します。</span></div>`:""}
        ${fixedUniversityNotice()}
        <div style="display:flex; flex-direction:column; gap:8px">
          ${fixed ? `<input type="hidden" id="req-univ" value="${esc(fixed)}"><input type="hidden" id="req-other" value="">` : `<select id="req-univ">${univOptionsHTML()}</select><input type="text" id="req-other" placeholder="大学名を入力" style="display:none">`}
          <input type="text" id="req-sid" autocomplete="username" placeholder="学籍番号（大原登録番号）" value="${esc(existing?.sid||"")}">
+         <div style="display:flex; align-items:stretch">
+           <span id="req-app-prefix" style="display:flex; align-items:center; padding:0 9px; border:1px solid var(--line); border-right:0; border-radius:8px 0 0 8px; background:#f3f8ff; font-weight:800">${esc(BokiIdentity.universityDisplayCode(fixed,UNIVERSITY_LINKS))}-</span>
+           <input type="text" id="req-app-id" maxlength="12" value="${esc(existing?.appId||"")}" placeholder="アプリID（全角カタカナ＋数字）" onblur="this.value=BokiIdentity.normalizeAppId(this.value)" style="flex:1; min-width:0; border-radius:0 8px 8px 0">
+         </div>
+         <small style="color:var(--sub); font-size:.72rem">ランキングなどでは学校コード付きのアプリIDだけを表示します。本名・学籍番号は入力しないでください。</small>
          <select id="req-group">${groupOptionsHTML(fixed,existing?.group||"")}</select>
          <input type="password" id="req-pin" inputmode="numeric" autocomplete="current-password" maxlength="6" placeholder="6桁暗証番号">
          <input type="password" id="req-pin-confirm" inputmode="numeric" autocomplete="new-password" maxlength="6" placeholder="6桁暗証番号（確認）">
@@ -659,7 +685,7 @@ function requireProfile(){
       if(UNIVERSITIES.includes(existing.univ)) univSel.value=existing.univ;
       else{ univSel.value="__other__"; other.value=existing.univ; }
     }
-    const refresh=()=>{ other.style.display=univSel.value==="__other__"?"":"none"; group.innerHTML=groupOptionsHTML(univSel.value==="__other__"?other.value.trim():univSel.value,existing?.group||""); };
+    const refresh=()=>{ const selected=univSel.value==="__other__"?other.value.trim():univSel.value; other.style.display=univSel.value==="__other__"?"":"none"; group.innerHTML=groupOptionsHTML(selected,existing?.group||""); bg.querySelector("#req-app-prefix").textContent=BokiIdentity.universityDisplayCode(selected,UNIVERSITY_LINKS)+"-"; };
     univSel.onchange=refresh; refresh();
   }
   const submit=async allowReset=>{
@@ -668,14 +694,17 @@ function requireProfile(){
     const sel=bg.querySelector("#req-univ");
     const univ=sel.value==="__other__"?bg.querySelector("#req-other").value.trim():sel.value;
     const sid=bg.querySelector("#req-sid").value.trim();
+    const appId=BokiIdentity.normalizeAppId(bg.querySelector("#req-app-id").value);
     const group=bg.querySelector("#req-group").value.trim();
     const pin=bg.querySelector("#req-pin").value;
     const confirmPin=bg.querySelector("#req-pin-confirm").value;
     if(!/^\d{6}$/.test(pin)){ err.textContent="暗証番号は数字6桁で入力してください。"; err.style.display=""; return; }
     if(pin!==confirmPin){ err.textContent="確認用の暗証番号が一致しません。"; err.style.display=""; return; }
+    const appIdError=appId?BokiIdentity.appIdValidationMessage(appId,sid):"";
+    if(appIdError){ err.textContent=appIdError; err.style.display=""; return; }
     button.disabled=true; button.textContent="確認中…";
     try{
-      const result=await connectStudentIdentity(univ,sid,group,pin,allowReset);
+      const result=await connectStudentIdentity(univ,sid,group,pin,allowReset,appId);
       if(result.wrongPin){
         err.textContent="暗証番号が一致しません。入力を確認するか、下の再設定を選んでください。"; err.style.display="";
         bg.querySelector("#req-reset").style.display="";
@@ -684,7 +713,7 @@ function requireProfile(){
       if(!result.ok){ err.textContent=result.message||"登録を確認できませんでした。"; err.style.display=""; return; }
       bg.remove(); initProfile(); refreshDataToggle(); updateHome(); renderAssignments();
       await loadStudentAccess(); enforceRosterAccess();
-      if(existing&&!document.getElementById("access-suspended")) alert("✅ これまでの学習記録を引き継ぎました。今後は、同じ学籍番号と6桁暗証番号で別の端末からも開けます。");
+      if(existing&&!document.getElementById("access-suspended")) alert(`✅ これまでの学習記録を引き継ぎました。アプリIDは「${displayIdForProfile(store.profile)}」です。`);
     }catch(e){ err.textContent="登録・復元に失敗しました："+(e.message||e); err.style.display=""; }
     finally{ if(document.body.contains(button)){ button.disabled=false; button.textContent=submitLabel; } }
   };
@@ -694,12 +723,15 @@ function requireProfile(){
   };
 }
 
-async function commitProfile(univ,sid,group="",pin="",allowReset=false){
+async function commitProfile(univ,sid,group="",appId="",pin="",allowReset=false){
   const fixed=fixedUniversity(); if(fixed) univ=fixed;
   if(!univ||!sid){ alert("大学名と学籍番号を入力してください。"); return false; }
+  appId=BokiIdentity.normalizeAppId(appId);
+  const appIdError=BokiIdentity.appIdValidationMessage(appId,sid);
+  if(appIdError){ alert(appIdError); return false; }
   const identity=await BokiIdentity.studentIdentity(univ,sid,UNIVERSITY_LINKS);
   if(store.identity?.studentKey===identity.studentKey){
-    store.profile={univ:identity.univ,sid:identity.sid,group:String(group||"").trim()};
+    store.profile={univ:identity.univ,sid:identity.sid,group:String(group||"").trim(),appId};
     saveStore(store); showProfileStatus(); renderAssignments(); updateHome(); return true;
   }
   if(!pin){
@@ -707,8 +739,8 @@ async function commitProfile(univ,sid,group="",pin="",allowReset=false){
     if(!pin) return false;
   }
   const previousStudentKey=store.identity?.studentKey||"";
-  let result=await connectStudentIdentity(univ,sid,group,pin,allowReset);
-  if(result.wrongPin && confirm("暗証番号が一致しません。学籍番号だけで暗証番号を再設定しますか？")) result=await connectStudentIdentity(univ,sid,group,pin,true);
+  let result=await connectStudentIdentity(univ,sid,group,pin,allowReset,appId);
+  if(result.wrongPin && confirm("暗証番号が一致しません。学籍番号だけで暗証番号を再設定しますか？")) result=await connectStudentIdentity(univ,sid,group,pin,true,appId);
   if(!result.ok){ alert(result.message||(result.wrongPin?"暗証番号が一致しません。":"登録情報を保存できませんでした。")); return false; }
   if(previousStudentKey && previousStudentKey!==identity.studentKey){
     try{ await markStudentRecordMigrated(previousStudentKey,identity.studentKey,store.profile); }
@@ -720,13 +752,14 @@ async function saveProfile(){
   const sel=document.getElementById("univ-select"), fixed=fixedUniversity();
   const univ=fixed||(sel.value==="__other__"?document.getElementById("univ-other").value.trim():sel.value);
   const sid=document.getElementById("sid-input").value.trim(), group=document.getElementById("group-input").value.trim();
-  if(!await commitProfile(univ,sid,group)) return;
+  const appId=document.getElementById("app-id-input").value;
+  if(!await commitProfile(univ,sid,group,appId)) return;
   alert("✅ 保存しました"); profileEditOpen=false; renderProfileArea(); refreshDataToggle();
 }
 function showProfileStatus(){
   const p=store.profile; if(!p) return;
   const hdr=document.querySelector("header p");
-  hdr.textContent=`仕訳問題対策｜${p.univ}　${p.sid}`;
+  hdr.textContent=`仕訳問題対策｜${displayIdForProfile(p)}`;
 }
 
 /* ===== クラウド同期（大学＋学籍番号の恒久学生キー方式） ===== */
@@ -753,6 +786,8 @@ async function studentCloudLoad(studentKey){
     verifier:{salt:firestoreString(doc.fields&&doc.fields.pinSalt),hash:firestoreString(doc.fields&&doc.fields.pinHash),iterations:firestoreInteger(doc.fields&&doc.fields.pinIterations)},
     createdAt:firestoreInteger(doc.fields&&doc.fields.createdAt),
     updateTime:doc.updateTime||"",
+    appId:firestoreString(doc.fields&&doc.fields.appId),
+    displayId:firestoreString(doc.fields&&doc.fields.displayId),
     migratedTo:firestoreString(doc.fields&&doc.fields.migratedTo),
     redirectUniv:firestoreString(doc.fields&&doc.fields.redirectUniv),
     redirectSid:firestoreString(doc.fields&&doc.fields.redirectSid)
@@ -790,6 +825,9 @@ async function cloudSave(){
     const identity={...store.identity};
     const localAtStart=studentDataSnapshot(store);
     const profileAtStart={...(store.profile||{})};
+    const appIdAtStart=BokiIdentity.normalizeAppId(profileAtStart.appId);
+    const appIdError=BokiIdentity.appIdValidationMessage(appIdAtStart,profileAtStart.sid);
+    if(appIdError)throw new Error(appIdError);
     for(let attempt=0;attempt<4;attempt++){
       const remote=await studentCloudLoad(identity.studentKey);
       if(remote?.migratedTo)throw new Error("この学籍番号は移行済みです。");
@@ -806,6 +844,8 @@ async function cloudSave(){
         sid:{stringValue:profileAtStart.sid||""},
         sidNormalized:{stringValue:identity.sidNormalized||""},
         group:{stringValue:profileAtStart.group||""},
+        appId:{stringValue:appIdAtStart},
+        displayId:{stringValue:BokiIdentity.formatDisplayId(profileAtStart.univ,appIdAtStart,UNIVERSITY_LINKS)},
         pinSalt:{stringValue:verifier.salt}, pinHash:{stringValue:verifier.hash}, pinIterations:{integerValue:String(verifier.iterations||BokiIdentity.PIN_ITERATIONS)},
         schemaVersion:{integerValue:"2"}, createdAt:{integerValue:String(createdAt)}, updatedAt:{integerValue:String(merged.updatedAt)}
       }};
@@ -839,7 +879,7 @@ async function cloudLoad(code){
   return JSON.parse(firestoreString(doc.fields&&doc.fields.data)||"{}");
 }
 
-async function connectStudentIdentity(univ,sid,group,pin,allowReset=false){
+async function connectStudentIdentity(univ,sid,group,pin,allowReset=false,appId=""){
   if(!/^\d{6}$/.test(String(pin||""))) return {ok:false,message:"暗証番号は数字6桁で入力してください。"};
   if(cloudSaveRunning)return {ok:false,message:"現在の記録を同期中です。数秒待ってから、もう一度お試しください。"};
   const identity=await BokiIdentity.studentIdentity(univ,sid,UNIVERSITY_LINKS);
@@ -848,6 +888,15 @@ async function connectStudentIdentity(univ,sid,group,pin,allowReset=false){
   let verifier=remote&&remote.verifier;
   if(remote && verifier?.hash && !allowReset && !await BokiIdentity.verifyPin(pin,verifier)) return {ok:false,wrongPin:true};
   if(!verifier?.hash || allowReset) verifier=await BokiIdentity.createPinVerifier(pin);
+  const enteredAppId=BokiIdentity.normalizeAppId(appId);
+  if(enteredAppId){
+    const enteredError=BokiIdentity.appIdValidationMessage(enteredAppId,sid);
+    if(enteredError)return {ok:false,message:enteredError};
+  }
+  const remoteAppId=BokiIdentity.normalizeAppId(remote?.appId||remote?.data?.profile?.appId||"");
+  const resolvedAppId=enteredAppId||(BokiIdentity.isValidAppId(remoteAppId)?remoteAppId:"");
+  const resolvedError=BokiIdentity.appIdValidationMessage(resolvedAppId,sid);
+  if(resolvedError)return {ok:false,message:resolvedError};
   const legacySync=store.sync;
   let local=studentDataSnapshot(store);
   if(legacySync?.code){
@@ -855,12 +904,12 @@ async function connectStudentIdentity(univ,sid,group,pin,allowReset=false){
   }
   const merged=BokiIdentity.mergeStores(remote&&remote.data,local);
   const remoteGroup=remote&&remote.data&&remote.data.profile&&remote.data.profile.group;
-  merged.profile={univ:identity.univ,sid:identity.sid,group:String(group||remoteGroup||"").trim()};
+  merged.profile={univ:identity.univ,sid:identity.sid,group:String(group||remoteGroup||"").trim(),appId:resolvedAppId};
   store={...merged,identity:{studentKey:identity.studentKey,univCode:identity.univCode,sidNormalized:identity.sidNormalized,pinVerifier:verifier,pinVerified:true,legacyCode:legacySync?.code||""}};
   if(legacySync) store.sync=legacySync;
   installBundledSets(); localStorage.setItem(KEY,JSON.stringify(store)); renderSync();
   if(!await cloudSave())return {ok:false,message:"クラウドへ保存できませんでした。通信環境を確認して、もう一度お試しください。"};
-  return {ok:true,restored:!!remote};
+  return {ok:true,restored:!!remote,displayId:BokiIdentity.formatDisplayId(identity.univ,resolvedAppId,UNIVERSITY_LINKS)};
 }
 
 /* ===== 管理者からの課題（自動配信） =====
@@ -909,14 +958,14 @@ function renderSync(){
     body=`<small style="color:var(--sub); font-size:.75rem">同期機能は準備中です（Firebase設定後に有効になります）</small>`;
   }else if(store.identity?.studentKey){
     body=`
-      <div style="font-size:.8rem; color:var(--sub)">別の端末では、大学専用URLから同じ学籍番号と6桁暗証番号を入力してください。</div>
+      <div style="font-size:.8rem; color:var(--sub)">別の端末では、大学専用URLから同じ学籍番号と6桁暗証番号を入力すると、アプリID「${esc(displayIdForProfile(store.profile))}」も自動復元されます。</div>
       <div class="btns" style="margin-top:6px">
         <button class="small-act" onclick="cloudSave()">今すぐ同期</button>
         <button class="small-act" onclick="changePin()">暗証番号を変更</button>
       </div>
       <small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px">${esc(syncStatus||(store.identity.lastSync?"最終同期："+new Date(store.identity.lastSync).toLocaleString("ja-JP"):"未同期"))}</small>`;
   }else{
-    body=`<div style="font-size:.8rem; color:var(--sub); margin-bottom:6px">大学・学籍番号・6桁暗証番号の確認後、自動で同期されます。</div><button class="small-act" onclick="requireProfile()">登録・復元を開く</button><small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px"></small>`;
+    body=`<div style="font-size:.8rem; color:var(--sub); margin-bottom:6px">大学・学籍番号・アプリID・6桁暗証番号の確認後、自動で同期されます。</div><button class="small-act" onclick="requireProfile()">登録・復元を開く</button><small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px"></small>`;
   }
   el.innerHTML=head+body;
   refreshDataToggle();
@@ -943,6 +992,8 @@ async function initSync(){
       }
       const identity={...store.identity,pinVerifier:remote.verifier?.hash?remote.verifier:store.identity.pinVerifier,lastSync:Date.now()};
       const sync=store.sync, merged=BokiIdentity.mergeStores(remote.data,studentDataSnapshot(store));
+      const restoredAppId=BokiIdentity.normalizeAppId(remote.appId||remote.data?.profile?.appId||"");
+      if(BokiIdentity.isValidAppId(restoredAppId))merged.profile={...(merged.profile||{}),appId:restoredAppId};
       store={...merged,identity}; if(sync) store.sync=sync;
       installBundledSets(); localStorage.setItem(KEY,JSON.stringify(store)); initProfile(); updateHome(); renderSync();
       setSyncStatus("✅ クラウドの記録と統合しました");

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const identity = require("../assets/identity-core.js");
 
-const links = [{ code:"gakushuin", name:"学習院大学" }];
+const links = [{ code:"gakushuin", displayCode:"GA", name:"学習院大学" }];
 
 test("studentIdentity normalizes full-width IDs and whitespace", async () => {
   const a = await identity.studentIdentity("学習院大学", " ab １２３ ", links);
@@ -20,6 +20,21 @@ test("PIN verifiers accept only the original six digits", async () => {
   assert.notEqual(verifier.hash, another.hash);
   assert.equal(await identity.verifyPin("123456", verifier), true);
   assert.equal(await identity.verifyPin("654321", verifier), false);
+});
+
+test("app IDs normalize half-width katakana and full-width digits", () => {
+  assert.equal(identity.normalizeAppId(" ｺﾂｻｸ０１ "), "コツサク01");
+  assert.equal(identity.isValidAppId("コツサク01"), true);
+  assert.equal(identity.isValidAppId("こつさく01"), false);
+  assert.equal(identity.isValidAppId("コツ・サク"), false);
+  assert.equal(identity.isValidAppId("ア"), false);
+});
+
+test("display IDs prepend the university code and reject student-number reuse", () => {
+  assert.equal(identity.universityDisplayCode("学習院大学", links), "GA");
+  assert.equal(identity.formatDisplayId("学習院大学", "コツサク01", links), "GA-コツサク01");
+  assert.equal(identity.formatDisplayId("未登録大学", "ネコ7", links), "OT-ネコ7");
+  assert.equal(identity.appIdValidationMessage("123456", "１２３４５６"), "アプリIDには学籍番号と異なる文字を設定してください。");
 });
 
 test("mergeStores keeps distinct IDs and deduplicates copied legacy events", () => {
