@@ -37,6 +37,19 @@ test("display IDs prepend the university code and reject student-number reuse", 
   assert.equal(identity.appIdValidationMessage("123456", "１２３４５６"), "アプリIDには学籍番号と異なる文字を設定してください。");
 });
 
+test("assignment achievements use completion and the highest score tier", () => {
+  assert.deepEqual(identity.assignmentAchievement([]), {
+    completed:false, key:"", label:"", rate:0, score:0, max:0, attempts:0
+  });
+  assert.equal(identity.assignmentAchievement([{score:79,max:100}]).key, "complete");
+  assert.equal(identity.assignmentAchievement([{score:80,max:100}]).label, "よくできました");
+  assert.equal(identity.assignmentAchievement([{score:90,max:100}]).label, "大変よくできました");
+  assert.equal(identity.assignmentAchievement([{score:10,max:10}]).label, "素晴らしい！");
+  const retained = identity.assignmentAchievement([{score:10,max:10},{score:6,max:10}]);
+  assert.equal(retained.key, "perfect");
+  assert.equal(retained.attempts, 2);
+});
+
 test("mergeStores keeps distinct IDs and deduplicates copied legacy events", () => {
   const legacy = { qid:"q1", correct:true, date:"2026-07-15", ms:1000 };
   const a = { history:[legacy, { id:"h-1", qid:"q2" }], tests:[], updatedAt:1, profile:{univ:"A",sid:"1"} };
