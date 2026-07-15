@@ -56,6 +56,28 @@
     return `${universityDisplayCode(university, links)}-${normalized}`;
   }
 
+  function assignmentAchievement(records) {
+    const attempts = (Array.isArray(records) ? records : []).map(record => ({
+      record,
+      score: Number(record && record.score),
+      max: Number(record && record.max)
+    })).filter(item => Number.isFinite(item.score) && Number.isFinite(item.max) && item.max > 0);
+    if (!attempts.length) return { completed:false, key:"", label:"", rate:0, score:0, max:0, attempts:0 };
+
+    const best = attempts.reduce((current, item) => {
+      if (!current) return item;
+      const rate = item.score / item.max;
+      const currentRate = current.score / current.max;
+      return rate > currentRate || (rate === currentRate && item.score > current.score) ? item : current;
+    }, null);
+    const rate = Math.max(0, best.score / best.max);
+    let key = "complete", label = "完了";
+    if (rate >= 1) { key = "perfect"; label = "素晴らしい！"; }
+    else if (rate >= 0.9) { key = "great"; label = "大変よくできました"; }
+    else if (rate >= 0.8) { key = "good"; label = "よくできました"; }
+    return { completed:true, key, label, rate, score:best.score, max:best.max, attempts:attempts.length };
+  }
+
   function bytesToHex(bytes) {
     return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
   }
@@ -231,6 +253,7 @@
     isValidAppId,
     appIdValidationMessage,
     formatDisplayId,
+    assignmentAchievement,
     sha256Hex,
     studentIdentity,
     createPinVerifier,

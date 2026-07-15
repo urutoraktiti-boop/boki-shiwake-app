@@ -166,6 +166,16 @@
   .test-btn b{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:.98rem;}
   .test-btn small{color:var(--sub); opacity:1;}
   .test-btn.done{color:var(--primary-dark); background:#edf3ed; border-color:#8ea99d;}
+  #assignment-btns{grid-template-columns:1fr;}
+  .assignment-btn{display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:96px; padding:11px 12px 11px 14px;}
+  .assignment-btn::after{display:none;}
+  .assignment-copy{display:block; min-width:0; flex:1;}
+  .assignment-copy b{overflow-wrap:anywhere;}
+  .assignment-stamp{flex:none; width:64px; height:64px; display:flex; align-items:center; justify-content:center; text-align:center; border:2px double currentColor; border-radius:50%; padding:5px; font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:.7rem; font-weight:800; line-height:1.18; letter-spacing:.03em; transform:rotate(-5deg); background:rgba(255,253,247,.72); box-shadow:inset 0 0 0 2px rgba(255,253,247,.9);}
+  .assignment-stamp-complete{color:#597064;}
+  .assignment-stamp-good{color:#39745d;}
+  .assignment-stamp-great{color:#9a6b24;}
+  .assignment-stamp-perfect{color:#a34f42; border-width:3px; font-size:.76rem;}
   .small-btns{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;}
   .small-btns button,.small-act,button.ghost{color:var(--primary-dark); background:transparent; border:1px solid var(--primary); border-radius:2px;}
   button.main{background:var(--primary); color:#fffdf7; border-radius:2px; letter-spacing:.04em;}
@@ -215,7 +225,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記 仕訳トレーニング <span class="ver">v3.34</span></h1>
+      <h1>簿記 仕訳トレーニング <span class="ver">v3.35</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -1085,10 +1095,13 @@ function renderAssignments(){
     const tests=(store.tests||[]).filter(t=>t.assignmentId===a.id);
     const last=tests[tests.length-1];
     const n=(a.qids||[]).filter(id=>known.has(id)).length;
-    const cleared=last && last.max>0 && last.score>=last.max*0.7;
-    return `<button class="test-btn ${cleared?'done':''}" onclick="startAssignment('${esc(a.id)}')">
-      <b>${esc(a.title||"課題")}</b>
-      <small>${last? `直近 ${last.score}/${last.max}点` : (n+"問・未挑戦")}</small>
+    const achievement=BokiIdentity.assignmentAchievement(tests);
+    const scoreText=!last?(n+"問・未挑戦"):(tests.length===1?`結果 ${last.score}/${last.max}点`:`最高 ${achievement.score}/${achievement.max}点｜直近 ${last.score}/${last.max}点`);
+    const stampLabels={complete:"完了",good:"よく<br>できました",great:"大変よく<br>できました",perfect:"素晴らしい！"};
+    const stamp=achievement.completed?`<span class="assignment-stamp assignment-stamp-${achievement.key}" aria-label="${esc(achievement.label)}">${stampLabels[achievement.key]}</span>`:"";
+    return `<button class="test-btn assignment-btn ${achievement.completed?'done':''}" onclick="startAssignment('${esc(a.id)}')">
+      <span class="assignment-copy"><b>${esc(a.title||"課題")}</b>
+      <small>${esc(scoreText)}</small></span>${stamp}
     </button>`;
   }).join("");
   wrap.style.display="";
