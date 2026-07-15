@@ -1,0 +1,16 @@
+{
+  "name": "簿記 仕訳トレーニング",
+  "short_name": "仕訳トレーニング",
+  "description": "大学生向けの簿記仕訳問題・学習記録アプリ",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#e9e3d7",
+  "theme_color": "#315c4d",
+  "icons": [
+    { "src": "assets/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

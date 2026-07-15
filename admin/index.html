@@ -79,6 +79,21 @@
   .publication-bulk-buttons button:hover{background:#dbeafe;}
   .publication-bulk-buttons button.selected{color:#fff; border-color:var(--primary); background:var(--primary); font-weight:700; box-shadow:0 1px 3px rgba(26,95,180,.25);}
   .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
+  .publication-track-section{border:2px solid; border-radius:8px; padding:11px; margin:10px 0;}
+  .publication-track-section.g3{border-color:#d3ae00;background:#fff9d9;}
+  .publication-track-section.g2-commercial{border-color:#df7b20;background:#fff0df;}
+  .publication-track-section.g2-industrial{border-color:#438b55;background:#eaf6ec;}
+  .publication-track-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-weight:700;}
+  .publication-track-heading small{font-weight:400;color:var(--sub);}
+  .publication-track-section.g3 .publication-bulk-row{border-color:#eadb82;}
+  .publication-track-section.g2-commercial .publication-bulk-row{border-color:#efc79f;}
+  .publication-track-section.g2-industrial .publication-bulk-row{border-color:#add1b5;}
+  .catalog-track-list{border-left:5px solid;padding:8px 9px;margin:10px 0;background:#fff;}
+  .catalog-track-list.g3{border-color:#d3ae00;background:#fffbea;}
+  .catalog-track-list.g2-commercial{border-color:#df7b20;background:#fff6ec;}
+  .catalog-track-list.g2-industrial{border-color:#438b55;background:#f0f8f1;}
+  .catalog-track-title{font-weight:700;margin-bottom:8px;}
+  .publication-summary{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0;}
   .assign-q{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; margin:0 6px 6px 0; font-size:.8rem; background:#fff; cursor:pointer;}
   .assign-q input{margin:0;}
   .assign-row-form label{display:block; font-size:.83rem; font-weight:600; margin:8px 0 3px;}
@@ -214,6 +229,7 @@
   .publication-bulk-buttons button:hover{background:#eee5d4;}
   .publication-bulk-buttons button.selected{color:#fffdf7; border-color:var(--primary); background:var(--primary); box-shadow:none;}
   .publication-bulk-buttons button.selected:hover{background:var(--primary-dark);}
+  .publication-track-section,.catalog-track-list{border-radius:2px;}
   .ranking-card{border-radius:2px; background:transparent;}
   .foot{border-top:1px solid var(--line); padding-top:12px;}
   #login-view{max-width:680px; margin:28px auto; border-top:4px double var(--text);}
@@ -235,7 +251,7 @@
   <header>
     <div>
       <span class="admin-kicker">SHIWAKE STUDY JOURNAL / ADMIN</span>
-      <h1>簿記 仕訳トレーニング管理 <span class="ver">v1.25</span></h1>
+      <h1>簿記 仕訳トレーニング管理 <span class="ver">v1.27</span></h1>
       <p>学生の学習記録・公開予定・課題を編集する管理画面</p>
     </div>
     <div id="user-box"></div>
@@ -306,6 +322,17 @@
           <tbody id="tbody"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card" id="identity-migration">
+      <div class="sec-title">🔄 学生記録の重複統合・新方式への移行</div>
+      <p class="muted" style="margin-top:0">同じ大学・学籍番号の旧同期コードをまとめ、学籍番号で自動復元できる新しい学生記録へ統合します。実行前に候補を確認できます。旧記録は削除せず、移行済みとして保管します。</p>
+      <div style="border-left:4px solid var(--primary); background:var(--paper-deep); padding:9px 11px; margin:10px 0; font-size:.82rem"><b>学生へ案内する前に</b><br>① 統合候補を表示して内容を確認 → ② 一括統合 → ③ 少人数で過去成績を確認 → ④ 大学専用QRコードを学生へ案内、の順で実施してください。</div>
+      <div id="migration-summary" class="mini-stat-row"></div>
+      <button id="migration-toggle-btn" type="button">統合候補を表示</button>
+      <button id="migration-run-btn" class="primary" type="button" style="display:none">確認した候補を一括統合</button>
+      <span id="migration-msg" class="muted" style="margin-left:8px"></span>
+      <div id="migration-list" style="display:none; margin-top:10px"></div>
     </div>
 
     <div class="card" id="roster-settings">
@@ -381,11 +408,12 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="../assets/identity-core.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, deleteDoc, setDoc, getDoc, runTransaction }
+import { getFirestore, collection, getDocs, doc, deleteDoc, setDoc, getDoc, runTransaction, writeBatch }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ===== 設定 ===== */
@@ -395,6 +423,8 @@ const FIREBASE_CONFIG = {
   projectId: "boki-shiwake-app"
 };
 const SYNC_COLLECTION = "boki2_sync";
+const STUDENT_COLLECTION = "boki2_students";
+const ACCESS_COLLECTION = "boki2_access";
 /* マスター管理者（Firestoreルールの isMasterAdmin と必ず一致させる） */
 const MASTER_ADMIN_EMAILS = ["urutoraktiti@gmail.com"];
 
@@ -407,6 +437,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
 
 let ROWS = [];      // 整形済みの学生データ
+let ALL_RECORDS = []; // 移行済みを含む旧・新レコード（重複統合用）
+let MIGRATION_CANDIDATES = [];
 let GROUPS = [];     // 列に使う回別テスト名（① 〜 の順）
 let sortKey = "univ";
 let sortAsc = true;
@@ -449,7 +481,7 @@ let editingId = null;   // 編集中の課題ID（新規は null）
 let PUBLICATION_DEFS = [];
 let editingPublicationId = null;
 let GROUP_CONFIG = { groupsByUniversity:{} };
-let ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{} };
+let ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{}, suspendedStudentKeys:{} };
 let rosterReviewOpen = false;
 
 /* ===== 認証 ===== */
@@ -637,6 +669,9 @@ async function saveGroupSettings() {
 function normalizeStudentId(value) {
   return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, "").toUpperCase();
 }
+async function studentIdentityFor(univ, sid) {
+  return await BokiIdentity.studentIdentity(univ, sid, UNIVERSITY_LINKS);
+}
 function normalizeRosterConfig(data) {
   const mapOfArrays = value => {
     const out = {};
@@ -648,11 +683,12 @@ function normalizeRosterConfig(data) {
   return {
     rostersByUniversity:mapOfArrays(data?.rostersByUniversity),
     approvedByUniversity:mapOfArrays(data?.approvedByUniversity),
-    suspendedCodes:(data?.suspendedCodes && typeof data.suspendedCodes === "object") ? {...data.suspendedCodes} : {}
+    suspendedCodes:(data?.suspendedCodes && typeof data.suspendedCodes === "object") ? {...data.suspendedCodes} : {},
+    suspendedStudentKeys:(data?.suspendedStudentKeys && typeof data.suspendedStudentKeys === "object") ? {...data.suspendedStudentKeys} : {}
   };
 }
 function rosterStatus(row) {
-  if (ROSTER_CONFIG.suspendedCodes[row.code]) return { key:"off", label:"利用停止" };
+  if (ROSTER_CONFIG.suspendedStudentKeys[row.studentKey] || ROSTER_CONFIG.suspendedCodes[row.code]) return { key:"off", label:"利用停止" };
   const roster = ROSTER_CONFIG.rostersByUniversity[row.univ] || [];
   const approved = ROSTER_CONFIG.approvedByUniversity[row.univ] || [];
   if (!roster.length) return { key:"none", label:"名簿未登録" };
@@ -734,7 +770,20 @@ async function importRosterFile(e) {
   const current=ROSTER_CONFIG.rostersByUniversity[univ]||[];
   const next=mode==="append"?[...new Set([...current,...ids])]:ids;
   if(!confirm(`${univ}の正規名簿を${next.length}名で${mode==="append"?"追加更新":"置き換え"}ます。よろしいですか？`)) return;
-  try { await updateRosterConfig(c=>{c.rostersByUniversity[univ]=next;}); $("roster-msg").textContent=`✅ ${file.name}：${ids.length}件を取り込みました`; renderRosterReview(); }
+  try {
+    await updateRosterConfig(c=>{c.rostersByUniversity[univ]=next;});
+    const identities=await Promise.all(next.map(id=>studentIdentityFor(univ,id)));
+    for(let offset=0;offset<identities.length;offset+=450){
+      const batch=writeBatch(db);
+      identities.slice(offset,offset+450).forEach(identity=>batch.set(doc(db,ACCESS_COLLECTION,identity.studentKey),{
+        status:ROSTER_CONFIG.suspendedStudentKeys[identity.studentKey]?"suspended":"active",
+        univ, sidNormalized:identity.sidNormalized, updatedAt:Date.now()
+      },{merge:true}));
+      await batch.commit();
+    }
+    $("roster-msg").textContent=`✅ ${file.name}：${ids.length}件を取り込みました`;
+    renderRosterReview();
+  }
   catch(err){ $("roster-msg").textContent="取込に失敗しました："+(err.code||err.message); }
 }
 function downloadRosterTemplate(){
@@ -745,9 +794,27 @@ function downloadRosterTemplate(){
 }
 function rowByCode(code){ return ROWS.find(r=>r.code===code); }
 async function approveRosterRow(code){ const r=rowByCode(code); if(!r)return; await updateRosterConfig(c=>{const a=c.approvedByUniversity[r.univ]||[]; c.approvedByUniversity[r.univ]=[...new Set([...a,normalizeStudentId(r.sid)])];}); renderRosterReview(); }
-async function suspendRosterRow(code){ const r=rowByCode(code); if(!r||!confirm(`${r.sid}の利用を停止しますか？`))return; await updateRosterConfig(c=>{c.suspendedCodes[code]={univ:r.univ,sid:r.sid,suspendedAt:Date.now(),by:currentUserEmail};}); renderRosterReview(); }
-async function resumeRosterRow(code){ await updateRosterConfig(c=>{delete c.suspendedCodes[code];}); renderRosterReview(); }
-async function deleteRosterRow(code){ const r=rowByCode(code); if(!r||!confirm(`${r.sid}を利用停止し、クラウド記録を削除しますか？`))return; await updateRosterConfig(c=>{c.suspendedCodes[code]={univ:r.univ,sid:r.sid,suspendedAt:Date.now(),by:currentUserEmail};}); await deleteDoc(doc(db,SYNC_COLLECTION,code)); ROWS=ROWS.filter(x=>x.code!==code); render(); renderRosterReview(); }
+async function suspendRosterRow(code){
+  const r=rowByCode(code); if(!r||!confirm(`${r.sid}の利用を停止しますか？`))return;
+  const info={univ:r.univ,sid:r.sid,suspendedAt:Date.now(),by:currentUserEmail};
+  await updateRosterConfig(c=>{c.suspendedStudentKeys[r.studentKey]=info; if(r.source==="legacy")c.suspendedCodes[code]=info;});
+  await setDoc(doc(db,ACCESS_COLLECTION,r.studentKey),{status:"suspended",univ:r.univ,sidNormalized:normalizeStudentId(r.sid),updatedAt:Date.now()},{merge:true});
+  renderRosterReview();
+}
+async function resumeRosterRow(code){
+  const r=rowByCode(code); if(!r)return;
+  await updateRosterConfig(c=>{delete c.suspendedStudentKeys[r.studentKey]; delete c.suspendedCodes[code];});
+  await setDoc(doc(db,ACCESS_COLLECTION,r.studentKey),{status:"active",univ:r.univ,sidNormalized:normalizeStudentId(r.sid),updatedAt:Date.now()},{merge:true});
+  renderRosterReview();
+}
+async function deleteRosterRow(code){
+  const r=rowByCode(code); if(!r||!confirm(`${r.sid}を利用停止し、クラウド記録を削除しますか？`))return;
+  const info={univ:r.univ,sid:r.sid,suspendedAt:Date.now(),by:currentUserEmail};
+  await updateRosterConfig(c=>{c.suspendedStudentKeys[r.studentKey]=info; if(r.source==="legacy")c.suspendedCodes[code]=info;});
+  await setDoc(doc(db,ACCESS_COLLECTION,r.studentKey),{status:"suspended",univ:r.univ,sidNormalized:normalizeStudentId(r.sid),updatedAt:Date.now()},{merge:true});
+  await deleteDoc(doc(db,r.source==="student"?STUDENT_COLLECTION:SYNC_COLLECTION,code));
+  ROWS=ROWS.filter(x=>x.code!==code); render(); renderRosterReview();
+}
 
 onAuthStateChanged(auth, async user => {
   if (user) {
@@ -795,69 +862,81 @@ onAuthStateChanged(auth, async user => {
 });
 
 /* ===== データ取得 ===== */
+function summarizeStudentRecord(snapshot, source, data, identity, groupSet) {
+  const f=snapshot.data(), tests=Array.isArray(data.tests)?data.tests:[];
+  const best={}, assignBest={};
+  tests.forEach(t=>{
+    if(!t)return;
+    if(t.assignmentId){
+      const a=assignBest[t.assignmentId]||{score:-1,max:t.max||0,attempts:0,last:null,detail:null,timeMs:null,runs:[]};
+      a.attempts++; a.last=t.completedAt||t.date||a.last;
+      a.runs.push({score:Number(t.score||0),max:Number(t.max||a.max||0),timeMs:t.timeMs??null,date:t.date||"",detail:t.detail||null});
+      const score=Number(t.score||0), fasterTie=score===a.score&&t.timeMs!=null&&(a.timeMs==null||t.timeMs<a.timeMs);
+      if(score>a.score||fasterTie){a.score=score;a.max=t.max||a.max;a.detail=t.detail||null;a.timeMs=t.timeMs??null;}
+      assignBest[t.assignmentId]=a; return;
+    }
+    if(!t.group)return;
+    groupSet.add(t.group);
+    const b=best[t.group]||{score:-1,max:t.max||0,attempts:0,last:null};
+    b.attempts++; b.last=t.completedAt||t.date||b.last;
+    if((t.score??0)>b.score){b.score=t.score;b.max=t.max||b.max;}
+    best[t.group]=b;
+  });
+  return {
+    code:snapshot.id, source, studentKey:identity.studentKey,
+    univ:f.univ||data.profile?.univ||"（未登録）", sid:f.sid||data.profile?.sid||"（未登録）",
+    updatedAt:Number(f.updatedAt||data.updatedAt||0), best, assignBest, attemptsTotal:tests.length,
+    migratedTo:f.migratedTo||"", _data:data, _fields:f
+  };
+}
+
+async function recordFromSnapshot(snapshot, source, groupSet) {
+  const f=snapshot.data(); let data={};
+  try{data=f.data?JSON.parse(f.data):{};}catch(e){}
+  const univ=f.univ||data.profile?.univ||"", sid=f.sid||data.profile?.sid||"";
+  if(!univ||!sid)return null;
+  const identity=await studentIdentityFor(univ,sid);
+  if(source==="student"&&snapshot.id!==identity.studentKey) identity.studentKey=snapshot.id;
+  return summarizeStudentRecord(snapshot,source,data,identity,groupSet);
+}
+
 async function loadData() {
   $("load-msg").textContent = "読み込み中…";
   try {
-    const snap = await getDocs(collection(db, SYNC_COLLECTION));
+    const [legacySnap,studentSnap] = await Promise.all([
+      getDocs(collection(db,SYNC_COLLECTION)), getDocs(collection(db,STUDENT_COLLECTION))
+    ]);
     ROWS = [];
+    ALL_RECORDS = [];
     ASSIGN_DEFS = [];
     PUBLICATION_DEFS = [];
     GROUP_CONFIG = { groupsByUniversity:{} };
-    ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{} };
+    ROSTER_CONFIG = { rostersByUniversity:{}, approvedByUniversity:{}, suspendedCodes:{}, suspendedStudentKeys:{} };
     const groupSet = new Set();
-    snap.forEach(doc => {
-      const f = doc.data();
+    const recordPromises=[];
+    legacySnap.forEach(snapshot => {
+      const f = snapshot.data();
       let data = {};
       try { data = f.data ? JSON.parse(f.data) : {}; } catch (e) { data = {}; }
-      // 課題定義・管理者設定ドキュメント（および万一の予約ID）は学生行に入れない
-      if (doc.id === ASSIGN_DOC || doc.id === PUBLICATION_DOC || doc.id === ADMIN_DOC || doc.id === GROUP_CONFIG_DOC || doc.id === ROSTER_CONFIG_DOC || doc.id.startsWith("__")) {
-        if (doc.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
-        if (doc.id === PUBLICATION_DOC) PUBLICATION_DEFS = Array.isArray(data.publications) ? data.publications : [];
-        if (doc.id === GROUP_CONFIG_DOC) GROUP_CONFIG = { groupsByUniversity:(data.groupsByUniversity && typeof data.groupsByUniversity === "object") ? data.groupsByUniversity : {} };
-        if (doc.id === ROSTER_CONFIG_DOC) ROSTER_CONFIG = normalizeRosterConfig(data);
+      if (snapshot.id === ASSIGN_DOC || snapshot.id === PUBLICATION_DOC || snapshot.id === ADMIN_DOC || snapshot.id === GROUP_CONFIG_DOC || snapshot.id === ROSTER_CONFIG_DOC || snapshot.id.startsWith("__")) {
+        if (snapshot.id === ASSIGN_DOC) ASSIGN_DEFS = Array.isArray(data.assignments) ? data.assignments : [];
+        if (snapshot.id === PUBLICATION_DOC) PUBLICATION_DEFS = Array.isArray(data.publications) ? data.publications : [];
+        if (snapshot.id === GROUP_CONFIG_DOC) GROUP_CONFIG = { groupsByUniversity:(data.groupsByUniversity && typeof data.groupsByUniversity === "object") ? data.groupsByUniversity : {} };
+        if (snapshot.id === ROSTER_CONFIG_DOC) ROSTER_CONFIG = normalizeRosterConfig(data);
         return;
       }
-      const tests = Array.isArray(data.tests) ? data.tests : [];
-      // 回別テストごとに「最高点」を集計（課題レコードは除外）
-      const best = {};        // group -> {score, max, attempts, last}
-      const assignBest = {};  // assignmentId -> {score, max, attempts, last, detail}
-      tests.forEach(t => {
-        if (!t) return;
-        if (t.assignmentId) {   // 課題の結果：メイン表とは別に集約
-          const a = assignBest[t.assignmentId] || { score: -1, max: t.max || 0, attempts: 0, last: null, detail: null, timeMs: null, runs: [] };
-          a.attempts++;
-          a.last = t.date || a.last;
-          a.runs.push({ score:Number(t.score || 0), max:Number(t.max || a.max || 0), timeMs:t.timeMs ?? null, date:t.date || "", detail:t.detail || null });
-          const score = Number(t.score || 0);
-          const fasterTie = score === a.score && t.timeMs != null && (a.timeMs == null || t.timeMs < a.timeMs);
-          if (score > a.score || fasterTie) { a.score = score; a.max = t.max || a.max; a.detail = t.detail || null; a.timeMs = t.timeMs ?? null; }
-          assignBest[t.assignmentId] = a;
-          return;
-        }
-        if (!t.group) return;
-        groupSet.add(t.group);
-        const b = best[t.group] || { score: -1, max: t.max || 0, attempts: 0, last: null };
-        b.attempts++;
-        b.last = t.date || b.last;
-        if ((t.score ?? 0) > b.score) { b.score = t.score; b.max = t.max || b.max; }
-        best[t.group] = b;
-      });
-      ROWS.push({
-        code: doc.id,
-        univ: f.univ || "（未登録）",
-        sid: f.sid || "（未登録）",
-        updatedAt: Number(f.updatedAt || data.updatedAt || 0),
-        best,
-        assignBest,
-        attemptsTotal: tests.length
-      });
+      recordPromises.push(recordFromSnapshot(snapshot,"legacy",groupSet));
     });
-    ROWS = ROWS.filter(r => canSeeUniv(r.univ));
+    studentSnap.forEach(snapshot=>recordPromises.push(recordFromSnapshot(snapshot,"student",groupSet)));
+    ALL_RECORDS=(await Promise.all(recordPromises)).filter(Boolean).filter(r=>canSeeUniv(r.univ));
+    ROWS=ALL_RECORDS.filter(r=>!r.migratedTo);
+    buildMigrationCandidates();
     GROUPS = [...groupSet].sort((a, b) => a.localeCompare(b, "ja"));
     buildUnivFilter();
     renderUnivLinks();
     renderGroupSettings();
     renderRosterSettings();
+    renderMigrationPanel();
     render();
     renderPublicationManage();
     renderAssignManage();
@@ -869,6 +948,96 @@ async function loadData() {
       データを取得できませんでした。Firestoreのセキュリティルールで、このメールアドレスに list 権限が付いているか確認してください。（${esc(e.code || e.message)}）
     </td></tr>`;
   }
+}
+
+function buildMigrationCandidates(){
+  const groups=new Map();
+  ALL_RECORDS.filter(r=>r.studentKey).forEach(r=>{
+    const list=groups.get(r.studentKey)||[]; list.push(r); groups.set(r.studentKey,list);
+  });
+  MIGRATION_CANDIDATES=[...groups.entries()].map(([studentKey,records])=>({
+    studentKey, records,
+    legacy:records.filter(r=>r.source==="legacy"&&!r.migratedTo),
+    canonical:records.find(r=>r.source==="student")||null,
+    univ:records.slice().sort((a,b)=>b.updatedAt-a.updatedAt)[0]?.univ||"",
+    sid:records.slice().sort((a,b)=>b.updatedAt-a.updatedAt)[0]?.sid||""
+  })).filter(c=>c.legacy.length).sort((a,b)=>(a.univ+a.sid).localeCompare(b.univ+b.sid,"ja"));
+}
+
+function renderMigrationPanel(){
+  const totalLegacy=MIGRATION_CANDIDATES.reduce((sum,c)=>sum+c.legacy.length,0);
+  const duplicates=MIGRATION_CANDIDATES.filter(c=>c.records.length>1).length;
+  $("migration-summary").innerHTML=[
+    ["移行対象",MIGRATION_CANDIDATES.length+"名"],["旧記録",totalLegacy+"件"],["重複あり",duplicates+"名"]
+  ].map(([label,value])=>`<div class="mini-stat"><div class="num">${value}</div><div class="lbl">${label}</div></div>`).join("");
+  const list=$("migration-list"), toggle=$("migration-toggle-btn"), run=$("migration-run-btn");
+  toggle.onclick=()=>{
+    const open=list.style.display==="none"; list.style.display=open?"":"none";
+    toggle.textContent=open?"統合候補を閉じる":"統合候補を表示"; run.style.display=open&&MIGRATION_CANDIDATES.length?"":"none";
+  };
+  list.innerHTML=MIGRATION_CANDIDATES.length?MIGRATION_CANDIDATES.map(c=>{
+    const codes=c.legacy.map(r=>r.code).join("、");
+    const attempts=c.records.reduce((sum,r)=>sum+r.attemptsTotal,0);
+    return `<div class="roster-row"><div><b>${esc(c.univ)}｜${esc(c.sid)}</b><br><span class="muted">旧記録 ${c.legacy.length}件${c.canonical?"＋新方式あり":""}｜テスト履歴 ${attempts}件<br>${esc(codes)}</span></div><span class="roster-state ${c.records.length>1?"roster-warn":"roster-none"}">${c.records.length>1?"統合":"移行"}</span></div>`;
+  }).join(""):`<p class="muted">移行が必要な旧記録はありません。</p>`;
+  run.onclick=migrateAllCandidates;
+}
+
+async function migrateCandidate(candidate){
+  const canonicalRef=doc(db,STUDENT_COLLECTION,candidate.studentKey);
+  const legacyRefs=candidate.legacy.map(r=>doc(db,SYNC_COLLECTION,r.code));
+  await runTransaction(db,async tx=>{
+    const canonicalSnap=await tx.get(canonicalRef);
+    const legacySnaps=[];
+    for(const ref of legacyRefs) legacySnaps.push(await tx.get(ref));
+    const sources=[];
+    if(canonicalSnap.exists()){
+      const f=canonicalSnap.data(); let data={}; try{data=JSON.parse(f.data||"{}");}catch(e){}
+      data.updatedAt=Math.max(Number(data.updatedAt||0),Number(f.updatedAt||0));
+      sources.push({data,updatedAt:Number(f.updatedAt||data.updatedAt||0)});
+    }
+    legacySnaps.forEach(snap=>{
+      if(!snap.exists()||snap.data().migratedTo)return;
+      const f=snap.data(); let data={}; try{data=JSON.parse(f.data||"{}");}catch(e){}
+      data.updatedAt=Math.max(Number(data.updatedAt||0),Number(f.updatedAt||0));
+      sources.push({data,updatedAt:Number(f.updatedAt||data.updatedAt||0)});
+    });
+    sources.sort((a,b)=>a.updatedAt-b.updatedAt);
+    let merged={history:[],sets:[],meta:{},tests:[],updatedAt:0};
+    sources.forEach(source=>{merged=BokiIdentity.mergeStores(merged,source.data);});
+    const profile={...(merged.profile||{}),univ:candidate.univ,sid:candidate.sid,group:merged.profile?.group||""};
+    const identity=await studentIdentityFor(candidate.univ,candidate.sid);
+    if(identity.studentKey!==candidate.studentKey)throw new Error("統合先の学生キーが一致しません。");
+    const current=canonicalSnap.exists()?canonicalSnap.data():{};
+    const now=Date.now(); merged.profile=profile; merged.updatedAt=Math.max(Number(merged.updatedAt||0),now); merged.schemaVersion=2;
+    const payload={
+      studentKey:candidate.studentKey,data:JSON.stringify(merged),univ:profile.univ||candidate.univ,
+      univCode:identity.univCode,sid:profile.sid||candidate.sid,sidNormalized:normalizeStudentId(profile.sid||candidate.sid),
+      group:profile.group||"",schemaVersion:2,createdAt:Number(current.createdAt||now),updatedAt:merged.updatedAt
+    };
+    if(current.pinSalt&&current.pinHash){payload.pinSalt=current.pinSalt;payload.pinHash=current.pinHash;payload.pinIterations=Number(current.pinIterations||BokiIdentity.PIN_ITERATIONS);}
+    tx.set(canonicalRef,payload);
+    legacySnaps.forEach((snap,index)=>{
+      if(snap.exists()&&!snap.data().migratedTo)tx.set(legacyRefs[index],{migratedTo:candidate.studentKey,migratedAt:now},{merge:true});
+    });
+    const suspended=!!ROSTER_CONFIG.suspendedStudentKeys[candidate.studentKey]||candidate.legacy.some(r=>ROSTER_CONFIG.suspendedCodes[r.code]);
+    tx.set(doc(db,ACCESS_COLLECTION,candidate.studentKey),{status:suspended?"suspended":"active",univ:payload.univ,sidNormalized:payload.sidNormalized,updatedAt:now},{merge:true});
+  });
+}
+
+async function migrateAllCandidates(){
+  if(!MIGRATION_CANDIDATES.length)return;
+  const legacyCount=MIGRATION_CANDIDATES.reduce((sum,c)=>sum+c.legacy.length,0);
+  if(!confirm(`${MIGRATION_CANDIDATES.length}名・旧記録${legacyCount}件を統合します。\n\n同一の大学・学籍番号の履歴をまとめ、旧記録は移行済みとして残します。実行しますか？`))return;
+  const button=$("migration-run-btn"),msg=$("migration-msg"); button.disabled=true;
+  try{
+    for(let i=0;i<MIGRATION_CANDIDATES.length;i++){
+      msg.textContent=`統合中… ${i+1}/${MIGRATION_CANDIDATES.length}`;
+      await migrateCandidate(MIGRATION_CANDIDATES[i]);
+    }
+    msg.textContent="✅ 統合が完了しました"; await loadData();
+  }catch(e){msg.textContent="統合に失敗しました："+(e.code||e.message);}
+  finally{button.disabled=false;}
 }
 
 /* ===== 大学フィルタ ===== */
@@ -1288,7 +1457,7 @@ function toggleDetail(tr, r) {
     </div>` : "";
   row.innerHTML = `<td colspan="99">
     <div style="margin-bottom:6px"><b>${esc(r.univ)}｜${esc(r.sid)}</b>
-      <span class="muted">（同期コード：${esc(r.code)}）</span></div>
+      <span class="muted">（${r.source==="student"?"学生キー":"旧同期コード"}：${esc(r.code)}）</span></div>
     <div class="detail-grid">${chips}</div>
     ${deleteBlock}
   </td>`;
@@ -1303,7 +1472,7 @@ function toggleDetail(tr, r) {
 async function deleteRow(r) {
   const ok1 = confirm(
     "この学生の記録を【クラウドから】削除します。\n\n"
-    + `大学：${r.univ}\n学籍番号：${r.sid}\n同期コード：${r.code}\n\n`
+    + `大学：${r.univ}\n学籍番号：${r.sid}\n${r.source==="student"?"学生キー":"旧同期コード"}：${r.code}\n\n`
     + "※学生の端末内のデータは消えません。もしその学生が再びアプリを使うと、端末から再同期されて復活する場合があります。\n\n"
     + "削除する場合は「OK」を押してください。"
   );
@@ -1311,7 +1480,7 @@ async function deleteRow(r) {
   const ok2 = confirm(`本当に削除しますか？（元に戻せません）\n\n大学：${r.univ}\n学籍番号：${r.sid}`);
   if (!ok2) return;
   try {
-    await deleteDoc(doc(db, SYNC_COLLECTION, r.code));
+    await deleteDoc(doc(db, r.source==="student"?STUDENT_COLLECTION:SYNC_COLLECTION, r.code));
     const idx = ROWS.indexOf(r);
     if (idx >= 0) ROWS.splice(idx, 1);
     render();
@@ -1420,6 +1589,15 @@ function canManagePublication(p) {
 function visiblePublications() {
   return PUBLICATION_DEFS.filter(canManagePublication);
 }
+function publicationSummaryHTML(qids) {
+  const counts={g3:0,"g2-commercial":0,"g2-industrial":0};
+  (qids||[]).forEach(qid=>{ const m=META.find(x=>x.qid===qid); if(m) counts[metaTrack(m)]++; });
+  return `<div class="publication-summary">
+    ${counts.g3?`<span class="level-badge g3">3級 ${counts.g3}問</span>`:""}
+    ${counts["g2-commercial"]?`<span class="level-badge g2-commercial">2級・商業簿記 ${counts["g2-commercial"]}問</span>`:""}
+    ${counts["g2-industrial"]?`<span class="level-badge g2-industrial">2級・工業簿記 ${counts["g2-industrial"]}問</span>`:""}
+  </div>`;
+}
 function renderPublicationManage() {
   const box = $("publication-list");
   if (!box) return;
@@ -1434,6 +1612,7 @@ function renderPublicationManage() {
     return `<div class="assign-list-item">
       <b>${esc(p.title || "問題公開")}</b><span class="pub-state pub-${state.key}">${state.label}</span>
       <div class="muted" style="margin:4px 0">${esc(targetLabel(p.target))}｜${(p.qids || []).length}問${owner}</div>
+      ${publicationSummaryHTML(p.qids)}
       <div class="muted" style="margin:4px 0">${esc(publicationPeriodLabel(p))}</div>
       <div class="muted" style="margin:4px 0">${(p.qids || []).map(q => esc(qidLabel(q))).join("／")}</div>
       <button data-publication-edit="${esc(p.id)}">✏ 編集</button>
@@ -1472,16 +1651,23 @@ function openPublicationForm(id) {
   const legacyButtons = legacyGroups.map((g, i) =>
     presetButton(`legacy-${i + 1}`, `${"①②③④⑤⑥⑦⑧⑨"[i]}のみすべて`, META.filter(m => m.group === g).map(m => m.qid))
   ).join("");
-  const mockRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
+  const mockCommercialRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
     const prefix = `2025年度2級直前模試 第${round}回・`;
     const commercial = META.filter(m => m.group === prefix + "第1問").map(m => m.qid);
+    return `<div class="publication-bulk-row">
+      <b>直前模試 第${round}回・第1問（商業簿記）</b>
+      <div class="publication-bulk-buttons">
+        ${presetButton(`mock-${round}-commercial`, `第${round}回の5問を選択`, commercial)}
+      </div>
+    </div>`;
+  }).join("");
+  const mockIndustrialRows = Array.from({length:6}, (_, i) => i + 1).map(round => {
+    const prefix = `2025年度2級直前模試 第${round}回・`;
     const industrial = META.filter(m => m.group === prefix + "第4問(1)").map(m => m.qid);
     return `<div class="publication-bulk-row">
-      <b>2025年度2級直前模試 第${round}回</b>
+      <b>直前模試 第${round}回・第4問(1)（工業簿記）</b>
       <div class="publication-bulk-buttons">
-        ${presetButton(`mock-${round}-all`, `第${round}回をすべて（8問）`, [...commercial, ...industrial])}
-        ${presetButton(`mock-${round}-commercial`, "第1問をすべて（5問）", commercial)}
-        ${presetButton(`mock-${round}-industrial`, "第4問(1)をすべて（3問）", industrial)}
+        ${presetButton(`mock-${round}-industrial`, `第${round}回の3問を選択`, industrial)}
       </div>
     </div>`;
   }).join("");
@@ -1500,40 +1686,57 @@ function openPublicationForm(id) {
   const mock3All = META.filter(m => /^2025年度3級直前模試 第[1-4]回・第1問$/.test(m.group)).map(m => m.qid);
   const bulkPicker = `<div class="publication-bulk">
     <div class="publication-bulk-title">まとめて選択</div>
-    <div class="publication-bulk-row">
-      <b>仕訳対策問題①〜⑨</b>
-      <div class="publication-bulk-buttons">
-        ${presetButton("legacy-all", "①〜⑨をすべて（49問）", legacyAll)}
-        ${legacyButtons}
+    <div class="publication-track-section g3">
+      <div class="publication-track-heading"><span>${badgeHTML({grade:3,subject:"commercial"})}</span><small>黄色の問題のみ</small></div>
+      <div class="publication-bulk-row">
+        <b>2025年度3級直前模試 第1回〜第4回</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("mock3-all", "全4回をすべて（60問）", mock3All)}
+        </div>
       </div>
+      ${mock3Rows}
     </div>
-    <div class="publication-bulk-row">
-      <b>2025年度2級直前模試 第1回〜第6回</b>
-      <div class="publication-bulk-buttons">
-        ${presetButton("mock-all", "第1回〜第6回をすべて（48問）", [...mockCommercialAll, ...mockIndustrialAll])}
-        ${presetButton("mock-commercial-all", "第1問をすべて（全6回・30問）", mockCommercialAll)}
-        ${presetButton("mock-industrial-all", "第4問(1)をすべて（全6回・18問）", mockIndustrialAll)}
+    <div class="publication-track-section g2-commercial">
+      <div class="publication-track-heading"><span>${badgeHTML({grade:2,subject:"commercial"})}</span><small>オレンジ色の問題のみ</small></div>
+      <div class="publication-bulk-row">
+        <b>仕訳対策問題①〜⑨</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("legacy-all", "①〜⑨をすべて（49問）", legacyAll)}
+          ${legacyButtons}
+        </div>
       </div>
-    </div>
-    ${mockRows}
-    <div class="publication-bulk-row">
-      <b>2025年度3級直前模試 第1回〜第4回</b>
-      <div class="publication-bulk-buttons">
-        ${presetButton("mock3-all", "第1回〜第4回をすべて（60問）", mock3All)}
+      <div class="publication-bulk-row">
+        <b>2025年度2級直前模試・商業簿記</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("mock-commercial-all", "全6回の第1問をすべて（30問）", mockCommercialAll)}
+        </div>
       </div>
+      ${mockCommercialRows}
     </div>
-    ${mock3Rows}
+    <div class="publication-track-section g2-industrial">
+      <div class="publication-track-heading"><span>${badgeHTML({grade:2,subject:"industrial"})}</span><small>緑色の問題のみ</small></div>
+      <div class="publication-bulk-row">
+        <b>2025年度2級直前模試・工業簿記</b>
+        <div class="publication-bulk-buttons">
+          ${presetButton("mock-industrial-all", "全6回の第4問(1)をすべて（18問）", mockIndustrialAll)}
+        </div>
+      </div>
+      ${mockIndustrialRows}
+    </div>
     <div class="publication-bulk-buttons" style="margin-top:8px">
       <button type="button" data-publication-clear>選択をすべて解除</button>
     </div>
   </div>`;
   const groups = [...new Set(META.map(m => m.group))].sort((a, b) => a.localeCompare(b, "ja"));
-  const picker = groups.map(g => {
-    const items = META.filter(m => m.group === g).map(m =>
-      `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount(); window.__publicationRefreshBulkButtons && window.__publicationRefreshBulkButtons()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
-    ).join("");
-    const first=META.find(m=>m.group===g);
-    return `<div class="assign-group" data-track="${metaTrack(first)}"><b>${badgeHTML(first)}${esc(g)}</b>${items}</div>`;
+  const picker = ["g3","g2-commercial","g2-industrial"].map(track => {
+    const trackGroups=groups.filter(g=>metaTrack(META.find(m=>m.group===g))===track);
+    const items=trackGroups.map(g=>{
+      const questions=META.filter(m => m.group === g).map(m =>
+        `<label class="assign-q"><input type="checkbox" value="${esc(m.qid)}" ${selected.has(m.qid) ? "checked" : ""} onchange="window.__publicationCount(); window.__publicationRefreshBulkButtons && window.__publicationRefreshBulkButtons()">${esc(m.label)}${m.topic ? `<span class="muted">｜${esc(m.topic)}</span>` : ""}<span class="muted">(${m.points})</span></label>`
+      ).join("");
+      return `<div class="assign-group"><b>${esc(g)}</b>${questions}</div>`;
+    }).join("");
+    return `<div class="catalog-track-list ${track}" data-track="${track}"><div class="catalog-track-title"><span class="level-badge ${track}">${trackLabel(track)}</span></div>${items}</div>`;
   }).join("");
   const univOpts = scopedUnivs.map(u => `<option value="${esc(u)}" ${initialUniv === u ? "selected" : ""}>${esc(u)}</option>`).join("");
   form.style.display = "";
@@ -1583,9 +1786,9 @@ function openPublicationForm(id) {
   $("publication-cancel").onclick = () => { form.style.display = "none"; form.innerHTML = ""; editingPublicationId = null; };
   const filterCatalog = () => {
     const grade=$("publication-grade-filter").value, subject=$("publication-subject-filter").value;
-    form.querySelectorAll(".assign-group[data-track]").forEach(group=>{
-      const track=group.dataset.track;
-      group.style.display=(grade==="all"||(grade==="g3"?track==="g3":track.startsWith("g2-")))&&(subject==="all"||track===`g2-${subject}`||(track==="g3"&&subject==="commercial"))?"":"none";
+    form.querySelectorAll(".catalog-track-list[data-track]").forEach(section=>{
+      const track=section.dataset.track;
+      section.style.display=(grade==="all"||(grade==="g3"?track==="g3":track.startsWith("g2-")))&&(subject==="all"||track===`g2-${subject}`||(track==="g3"&&subject==="commercial"))?"":"none";
     });
   };
   $("publication-grade-filter").onchange=filterCatalog;
@@ -2098,7 +2301,7 @@ function toggleAssignStudentDetail(tr, r, a) {
   row.className = "student-detail-row";
   row.innerHTML = `<td colspan="99">
     <b>${esc(r.univ)}｜${esc(r.sid)}</b>
-    <span class="muted">（同期コード：${esc(r.code)}）</span>
+    <span class="muted">（${r.source==="student"?"学生キー":"旧同期コード"}：${esc(r.code)}）</span>
     <div class="detail-grid" style="margin-top:8px">${detail || '<span class="muted">詳細がありません。</span>'}</div>
   </td>`;
   tr.after(row);

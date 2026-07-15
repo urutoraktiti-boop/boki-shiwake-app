@@ -38,20 +38,62 @@ service cloud.firestore {
       return code in ['assignments-config', 'publications-config', 'admin-config', 'group-config', 'student-roster-config'];
     }
 
+    function studentAccessIsOpen(studentKey) {
+      return !exists(/databases/$(database)/documents/boki2_access/$(studentKey))
+             || get(/databases/$(database)/documents/boki2_access/$(studentKey)).data.status != 'suspended';
+    }
+
+    function validStudentRecord(studentKey) {
+      return request.resource.data.keys().hasOnly([
+               'studentKey', 'data', 'univ', 'univCode', 'sid', 'sidNormalized', 'group',
+               'pinSalt', 'pinHash', 'pinIterations', 'schemaVersion', 'createdAt', 'updatedAt',
+               'migratedTo', 'migratedAt', 'redirectUniv', 'redirectSid'
+             ])
+             && request.resource.data.studentKey == studentKey
+             && request.resource.data.data is string
+             && request.resource.data.univ is string
+             && request.resource.data.univCode is string
+             && request.resource.data.sid is string
+             && request.resource.data.sidNormalized is string
+             && request.resource.data.sidNormalized.size() > 0
+             && request.resource.data.group is string
+             && request.resource.data.schemaVersion == 2
+             && request.resource.data.createdAt is int
+             && request.resource.data.updatedAt is int;
+    }
+
+    function isStudentMigrationMark() {
+      return !('migratedTo' in resource.data)
+             && request.resource.data.migratedTo is string
+             && request.resource.data.migratedTo.size() > 0
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'migratedTo', 'migratedAt', 'redirectUniv', 'redirectSid'
+                ]);
+    }
+
     // ===== 簿記2級 学生の学習記録（同期コードごと1件） =====
     match /boki2_sync/{code} {
       // 学生：同期コードを知っていれば、その1件だけ読み書きできる（従来どおり）
       // ただし課題定義・問題公開設定ドキュメントは管理者だけ、
       // 管理者設定ドキュメント（admin-config）はマスター管理者だけが書き換え可能。
       allow get: if !isReservedDoc(code)
-                 || code in ['assignments-config', 'publications-config', 'group-config', 'student-roster-config']
+                 || code in ['assignments-config', 'publications-config', 'group-config']
                  || isAdmin();
-      allow create, update: if !isReservedDoc(code)
-                            || (code == 'assignments-config' && isAdmin())
-                            || (code == 'publications-config' && isAdmin())
-                            || (code == 'group-config' && isAdmin())
-                            || (code == 'student-roster-config' && isAdmin())
-                            || (code == 'admin-config' && isMasterAdmin());
+      allow create: if (!isReservedDoc(code) && !('migratedTo' in request.resource.data))
+                    || (code == 'assignments-config' && isAdmin())
+                    || (code == 'publications-config' && isAdmin())
+                    || (code == 'group-config' && isAdmin())
+                    || (code == 'student-roster-config' && isAdmin())
+                    || (code == 'admin-config' && isMasterAdmin());
+      allow update: if (isAdmin() && !isReservedDoc(code))
+                    || (!isReservedDoc(code)
+                        && !('migratedTo' in resource.data)
+                        && !('migratedTo' in request.resource.data))
+                    || (code == 'assignments-config' && isAdmin())
+                    || (code == 'publications-config' && isAdmin())
+                    || (code == 'group-config' && isAdmin())
+                    || (code == 'student-roster-config' && isAdmin())
+                    || (code == 'admin-config' && isMasterAdmin());
 
       // 管理者だけ「一覧（list）」できる ＝ ダッシュボード用
       //  ・マスター管理者はメール直書きで許可
@@ -61,6 +103,31 @@ service cloud.firestore {
       // 学生記録の削除は管理者に許可。担当大学の制限は管理画面側で行う。
       // 管理用の予約ドキュメント自体は削除しない。
       allow delete: if isAdmin() && !isReservedDoc(code);
+    }
+
+    // ===== 大学＋学籍番号から作る恒久学生キー（1人1件） =====
+    match /boki2_students/{studentKey} {
+      // 学生アプリは決定的なキーの1件だけを取得する。一覧取得は管理者のみ。
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if validStudentRecord(studentKey)
+                    && (isAdmin()
+                        || (!('migratedTo' in request.resource.data) && studentAccessIsOpen(studentKey)));
+      allow update: if validStudentRecord(studentKey)
+                    && request.resource.data.studentKey == resource.data.studentKey
+                    && request.resource.data.univCode == resource.data.univCode
+                    && request.resource.data.sidNormalized == resource.data.sidNormalized
+                    && (isAdmin()
+                        || (studentAccessIsOpen(studentKey)
+                            && ((!('migratedTo' in resource.data) && !('migratedTo' in request.resource.data))
+                                || isStudentMigrationMark())));
+      allow delete: if isAdmin();
+    }
+
+    // ===== 学生1人分の利用可否。名簿全体は boki2_sync/student-roster-config に非公開で保持 =====
+    match /boki2_access/{studentKey} {
+      allow get: if true;
+      allow list, create, update, delete: if isAdmin();
     }
 
     // ===== 3級版を作る場合は、ここに boki3_sync を同じ形で追加する =====
