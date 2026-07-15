@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#315c4d">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../assets/app-icon-180.png">
 <title>簿記 仕訳トレーニング</title>
 <style>
   :root{
@@ -44,7 +47,7 @@
   @keyframes symscroll{0%,18%{transform:translateX(0)} 55%,78%{transform:translateX(var(--shift))} 100%{transform:translateX(0)}}
   .sym-box::after{content:"▾"; position:absolute; right:5px; top:50%; transform:translateY(-50%); color:var(--sub); font-size:.72rem; pointer-events:none;}
   .sym-box select{position:absolute; inset:0; width:100%; height:100%; opacity:0; font-size:16px; cursor:pointer;}
-  select,input[type=text]{padding:9px 8px; border:1px solid var(--line); border-radius:8px; font-size:16px; background:#fff;}
+  select,input[type=text],input[type=password]{padding:9px 8px; border:1px solid var(--line); border-radius:8px; font-size:16px; background:#fff;}
   .row .del{border:none; background:#eef1f5; color:var(--sub); border-radius:8px; width:34px; height:38px; cursor:pointer; font-size:1rem; flex:none;}
   .addrow{border:1px dashed var(--primary); color:var(--primary); background:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:.82rem; margin-bottom:4px;}
   .btns{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
@@ -168,7 +171,7 @@
   button.main{background:var(--primary); color:#fffdf7; border-radius:2px; letter-spacing:.04em;}
   button.quiz-nav{background:var(--primary); color:#fffdf7; border:1px solid var(--primary); border-radius:2px; padding:12px 20px; font-size:.95rem; cursor:pointer; flex:1; font-weight:700; box-shadow:0 2px 0 rgba(32,40,35,.18);}
   button.quiz-check{background:transparent; color:var(--sub); border:1px solid var(--line); border-radius:2px; padding:12px 20px; font-size:.95rem; cursor:pointer; flex:1; font-weight:500; box-shadow:none;}
-  select,input[type=text]{border-radius:2px; border-color:var(--line); background:var(--paper);}
+  select,input[type=text],input[type=password]{border-radius:2px; border-color:var(--line); background:var(--paper);}
   .options{grid-template-columns:1fr; gap:0; background:transparent; border:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:0; padding:9px 2px;}
   .qhead{padding-bottom:10px; border-bottom:1px solid var(--line);}
   .qnum{font-family:"Yu Mincho","Hiragino Mincho ProN",serif; color:var(--primary-dark);}
@@ -212,7 +215,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記 仕訳トレーニング <span class="ver">v3.30</span></h1>
+      <h1>簿記 仕訳トレーニング <span class="ver">v3.31</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -271,8 +274,15 @@
         <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px">
           <div style="border:1px solid var(--line); border-radius:10px; padding:10px; background:#fafcfe">
             <div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:4px">📖 データを守る・機種変更で引き継ぐ方法</div>
-            <div style="font-size:.85rem; color:var(--sub); margin-bottom:8px">同期コードの発行・保存・機種変更時の復元手順を、初心者向けにまとめています。</div>
+            <div style="font-size:.85rem; color:var(--sub); margin-bottom:8px">学籍番号と6桁暗証番号で、別の端末から同じ記録を開く方法をまとめています。</div>
             <a href="help/" target="_blank" rel="noopener" class="small-act" style="display:inline-block; text-decoration:none">📖 ガイドを開く（別タブで開きます） ↗</a>
+          </div>
+        </div>
+        <div id="pwa-install-wrap" style="border-top:1px solid var(--line); margin-top:10px; padding-top:10px">
+          <div style="border:1px solid var(--line); border-radius:10px; padding:10px; background:#fafcfe">
+            <div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:4px">📱 ホーム画面からすぐ開く</div>
+            <div id="pwa-install-note" style="font-size:.82rem; color:var(--sub); margin-bottom:8px">ブラウザ版のままでも記録は引き継げます。ホーム画面へ追加すると、アプリのようにすぐ起動できます。</div>
+            <button id="pwa-install-btn" class="small-act" type="button" style="display:none" onclick="installPwa()">ホーム画面に追加</button>
           </div>
         </div>
       </div>
@@ -292,6 +302,7 @@
   </div>
 </div>
 
+<script src="../assets/identity-core.js"></script>
 <script>
 /* エラーを画面に表示（不具合調査用） */
 window.addEventListener("error",e=>{
@@ -328,12 +339,13 @@ const FIREBASE_CONFIG={
   projectId:"boki-shiwake-app",
   apiKey:"AIzaSyC29p0TS5K8FFs4s0ICxRrcOSLdXOnwIII"
 };
-const SYNC_COLLECTION="boki2_sync";
+const SYNC_COLLECTION="boki2_sync";          /* 公開設定などと移行前の同期コード記録 */
+const STUDENT_COLLECTION="boki2_students";   /* 大学＋学籍番号から作る恒久学生キー */
+const ACCESS_COLLECTION="boki2_access";      /* 学生ごとの利用可否（名簿全体は公開しない） */
 /* 管理者が作る「課題」の定義を置く予約ドキュメントID（boki2_sync 内。生徒は読むだけ） */
 const ASSIGN_DOC="assignments-config";  /* boki2_sync 内の課題定義ドキュメント（__..__ はFirestore予約IDのため使えない） */
 const PUBLICATION_DOC="publications-config"; /* 問題ごとの対象・公開期間 */
 const GROUP_CONFIG_DOC="group-config"; /* 大学別のグループ候補 */
-const ROSTER_CONFIG_DOC="student-roster-config"; /* 正規名簿と管理者による利用停止 */
 const PUBLICATION_CACHE_KEY="boki2_publications_cache";
 
 /* 同梱問題セット（配布版ではここに問題データが入り、初回起動時に自動追加される） */
@@ -342,7 +354,10 @@ const BUNDLED_SETS=[];
 function loadStore(){ try{return JSON.parse(localStorage.getItem(KEY))||{history:[],sets:[]};}catch(e){return {history:[],sets:[]};} }
 function saveStore(s){ s.updatedAt=Date.now(); localStorage.setItem(KEY,JSON.stringify(s)); scheduleCloudSave(); }
 let store=loadStore();
+store.history ??= [];
 store.sets ??= [];
+store.tests ??= [];
+store.meta ??= {};
 
 let PUBLICATIONS=[];
 let PUBLICATIONS_READY=false;
@@ -441,11 +456,15 @@ const UNIVERSITY_LINKS=[
   {code:"komazawa", name:"駒澤大学"},
   {code:"senshu", name:"専修大学"}
 ]; /* 大学別QRコード用。URLに ?univ=gakushuin のように付けると大学名を固定する */
+const UNIVERSITY_ENTRY_KEY="boki2_university_entry";
 function fixedUniversity(){
   try{
     const params=new URLSearchParams(location.search);
     const code=(params.get("univ")||params.get("university")||params.get("campus")||"").trim().toLowerCase();
-    const hit=UNIVERSITY_LINKS.find(u=>u.code===code);
+    let hit=UNIVERSITY_LINKS.find(u=>u.code===code);
+    if(hit)localStorage.setItem(UNIVERSITY_ENTRY_KEY,hit.code);
+    const standalone=window.matchMedia?.("(display-mode: standalone)").matches||navigator.standalone===true;
+    if(!hit&&standalone)hit=UNIVERSITY_LINKS.find(u=>u.code===localStorage.getItem(UNIVERSITY_ENTRY_KEY));
     return hit ? hit.name : "";
   }catch(e){ return ""; }
 }
@@ -465,7 +484,7 @@ function univOptionsHTML(){
     +`<option value="__other__">その他（直接入力）</option>`;
 }
 let GROUP_CONFIG={groupsByUniversity:{}};
-let ROSTER_ACCESS={suspendedCodes:{}};
+let ACCESS_STATUS={status:"active"};
 function groupValues(univ){
   const values=GROUP_CONFIG.groupsByUniversity&&GROUP_CONFIG.groupsByUniversity[univ];
   return Array.isArray(values)?values.map(String).filter(Boolean):[];
@@ -482,21 +501,22 @@ async function loadGroupConfig(){
     GROUP_CONFIG={groupsByUniversity:(data&&data.groupsByUniversity&&typeof data.groupsByUniversity==="object")?data.groupsByUniversity:{}};
   }catch(e){ GROUP_CONFIG={groupsByUniversity:{}}; }
 }
-async function loadRosterAccess(){
+async function loadStudentAccess(){
+  const key=store.identity&&store.identity.studentKey;
+  if(!key){ ACCESS_STATUS={status:"active"}; return; }
   try{
-    const data=await cloudLoad(ROSTER_CONFIG_DOC);
-    ROSTER_ACCESS={suspendedCodes:(data&&data.suspendedCodes&&typeof data.suspendedCodes==="object")?data.suspendedCodes:{}};
-  }catch(e){ ROSTER_ACCESS={suspendedCodes:{}}; }
+    const doc=await firestoreLoad(ACCESS_COLLECTION,key);
+    ACCESS_STATUS={status:firestoreString(doc&&doc.fields&&doc.fields.status)||"active"};
+  }catch(e){ ACCESS_STATUS={status:"active"}; }
 }
 function enforceRosterAccess(){
   if(isAdminPreview()) return;
-  const code=store.sync&&store.sync.code;
-  if(!code || !ROSTER_ACCESS.suspendedCodes[code]) return;
+  if(ACCESS_STATUS.status!=="suspended") return;
   if(document.getElementById("access-suspended")) return;
   pauseTimer();
   const bg=document.createElement("div");
   bg.id="access-suspended"; bg.className="modal-bg"; bg.style.zIndex="9999";
-  bg.innerHTML=`<div class="modal" style="text-align:center"><h3 style="margin-top:0">利用状況を確認してください</h3><p style="font-size:.9rem; color:var(--sub)">登録情報の確認が必要なため、現在このアプリは利用できません。<br>学籍番号（大原登録番号）をご確認のうえ、担当の先生へお問い合わせください。</p><div style="margin-top:12px; font-size:.78rem; color:var(--sub)">同期コード：${esc(code)}</div></div>`;
+  bg.innerHTML=`<div class="modal" style="text-align:center"><h3 style="margin-top:0">利用状況を確認してください</h3><p style="font-size:.9rem; color:var(--sub)">登録情報の確認が必要なため、現在このアプリは利用できません。<br>学籍番号（大原登録番号）をご確認のうえ、担当の先生へお問い合わせください。</p><div style="margin-top:12px; font-size:.78rem; color:var(--sub)">${esc(store.profile?.univ||"")}｜${esc(store.profile?.sid||"")}</div></div>`;
   document.body.appendChild(bg);
 }
 function updateProfileGroupOptions(){
@@ -558,7 +578,7 @@ function renderProfileArea(){
         <button class="small-act" onclick="saveCurrentGroup()">グループ番号を保存</button>
       </div>
       <button class="small-act" onclick="startProfileEdit()">ユーザー情報を修正する</button>
-      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">修正しても同期コードは変わりません。管理者画面には次回同期後、新しい大学名・学籍番号で表示されます。</small>
+      <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">同じ大学・学籍番号を使えば、別の端末でも同じ学習記録を開けます。学籍番号を修正した場合は、修正先の記録と統合します。</small>
       ${fixedUniversity() && p.univ!==fixedUniversity() ? `<small style="display:block; color:var(--ng); font-size:.72rem; margin-top:6px">このリンクは「${esc(fixedUniversity())}」専用です。大学名を直す場合は「ユーザー情報を修正する」から保存してください。</small>` : ""}`;
     form.style.display="none";
     if(cancel) cancel.style.display="none";
@@ -567,7 +587,7 @@ function renderProfileArea(){
     current.style.display="none";
     form.style.display="flex";
     if(cancel) cancel.style.display=(p && p.univ && p.sid) ? "" : "none";
-    if(status) status.textContent=fixedUniversity() ? "大学名はこのリンクの大学で固定されます。学籍番号を確認して保存してください。" : (p ? "修正後も同じ同期コードで保存されます。" : "大学名と学籍番号を設定すると、成績レポートに記載されます。");
+    if(status) status.textContent=fixedUniversity() ? "大学名はこのリンクの大学で固定されます。学籍番号を確認して保存してください。" : (p ? "学籍番号を変更する場合は、変更先の6桁暗証番号を確認します。" : "大学名・学籍番号・6桁暗証番号を登録してください。");
   }
 }
 function startProfileEdit(){
@@ -580,11 +600,11 @@ function cancelProfileEdit(){
   setProfileInputs(store.profile);
   renderProfileArea();
 }
-function saveCurrentGroup(){
+async function saveCurrentGroup(){
   const p=store.profile;
   const input=document.getElementById("profile-current-group");
   if(!p || !input) return;
-  if(!commitProfile(p.univ,p.sid,input.value)) return;
+  if(!await commitProfile(p.univ,p.sid,input.value)) return;
   profileEditOpen=false;
   renderProfileArea();
   alert("✅ グループ番号を保存しました");
@@ -592,7 +612,7 @@ function saveCurrentGroup(){
 /* 設定内の各セクションの開閉 */
 function dataSettingsLabel(open){
   const profileState=store.profile?"登録済み":"未登録";
-  const syncState=!syncReady()? "" : (store.sync?.code? "・同期有効" : "・同期未設定");
+  const syncState=!syncReady()? "" : (store.identity?.studentKey? "・同期有効" : "・本人確認待ち");
   return `💾 データ保存・引き継ぎ（${profileState}${syncState}） ${open?"▲":"▼"}`;
 }
 function refreshDataToggle(){
@@ -605,91 +625,103 @@ function toggleDataSettings(btn){
   const open=el.style.display==="none"; el.style.display=open?"":"none";
   btn.textContent=dataSettingsLabel(open);
 }
-/* 初回起動時：未登録なら大学・学籍番号の入力を必須で促す */
+/* 初回・新端末：大学＋学籍番号から同じ学生キーを作り、6桁暗証番号を確認する。 */
 function requireProfile(){
   if(isAdminPreview()) return;
-  if(store.profile && store.profile.univ && store.profile.sid) return;
-  const fixed=fixedUniversity();
+  if(store.profile?.univ && store.profile?.sid && store.identity?.studentKey && store.identity?.pinVerified) return;
+  if(document.getElementById("identity-modal")) return;
+  const existing=store.profile&&store.profile.univ&&store.profile.sid ? store.profile : null;
+  const submitLabel=existing?"以前の記録を引き継ぐ":"登録・記録を復元する";
+  const fixed=fixedUniversity()||existing?.univ||"";
   const bg=document.createElement("div");
-  bg.className="modal-bg";
+  bg.id="identity-modal"; bg.className="modal-bg";
   bg.innerHTML=`<div class="modal">
-       <h3 style="margin-top:0">はじめに登録してください</h3>
-       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">成績を記録するため、${fixed ? "あなたの<b>学籍番号（大原登録番号）</b>" : "あなたの<b>大学</b>と<b>学籍番号（大原登録番号）</b>"}を登録してください。グループ番号は任意です。（あとで「設定 → データ保存・引き継ぎ」から修正できます）</div>
+       <h3 style="margin-top:0">${existing?"これまでの学習記録を引き継ぎます":"登録・学習記録の復元"}</h3>
+       <div style="font-size:.85rem; color:var(--sub); margin-bottom:10px">${existing?"新しく登録し直す必要はありません。表示されている学籍番号を確認してください。この画面が初めてなら新しい数字6桁を決め、すでに設定済みなら同じ暗証番号を入力します。":"以前利用した方は、これまでと同じ学籍番号を入力してください。初めて利用する方は、自分の学籍番号と数字6桁の暗証番号を登録します。"}</div>
+       ${existing?`<div style="border-left:4px solid var(--primary); background:#f3f8ff; padding:9px 10px; margin-bottom:10px; font-size:.8rem"><b>以前の登録</b><br>${esc(existing.univ)}｜${esc(existing.sid)}<br><span style="color:var(--sub)">端末内・旧クラウド・新クラウドの記録を統合します。</span></div>`:""}
        ${fixedUniversityNotice()}
        <div style="display:flex; flex-direction:column; gap:8px">
          ${fixed ? `<input type="hidden" id="req-univ" value="${esc(fixed)}"><input type="hidden" id="req-other" value="">` : `<select id="req-univ">${univOptionsHTML()}</select><input type="text" id="req-other" placeholder="大学名を入力" style="display:none">`}
-         <input type="text" id="req-sid" placeholder="学籍番号（大原登録番号）">
-         <select id="req-group">${groupOptionsHTML(fixed)}</select>
-         <button class="main" id="req-save" style="width:100%; margin-top:4px">登録する</button>
+         <input type="text" id="req-sid" autocomplete="username" placeholder="学籍番号（大原登録番号）" value="${esc(existing?.sid||"")}">
+         <select id="req-group">${groupOptionsHTML(fixed,existing?.group||"")}</select>
+         <input type="password" id="req-pin" inputmode="numeric" autocomplete="current-password" maxlength="6" placeholder="6桁暗証番号">
+         <input type="password" id="req-pin-confirm" inputmode="numeric" autocomplete="new-password" maxlength="6" placeholder="6桁暗証番号（確認）">
+         <div id="req-error" style="display:none; color:var(--ng); font-size:.8rem"></div>
+         <button class="main" id="req-save" style="width:100%; margin-top:4px">${submitLabel}</button>
+         <button class="small-act" id="req-reset" style="display:none">暗証番号を忘れた・再設定する</button>
        </div>
-       <div style="border-top:1px solid var(--line); margin-top:14px; padding-top:12px">
-         <div style="font-size:.82rem; color:var(--sub); margin-bottom:6px">機種変更などで<b>すでに同期コードをお持ちの方</b>は、こちらから記録を引き継げます。</div>
-         <div style="display:flex; gap:6px">
-           <input type="text" id="req-code" placeholder="BK2-XXXX-XXXX-XXXX" style="flex:1; min-width:0; text-transform:uppercase">
-           <button class="small-act" id="req-restore">復元</button>
-         </div>
-       </div>
+       <div style="border-top:1px solid var(--line); margin-top:14px; padding-top:10px; font-size:.72rem; color:var(--sub)">以前の同期コードは入力不要です。暗証番号を忘れた場合は学籍番号だけで再設定できるため、暗証番号は入力間違いを防ぐための確認用です。他人の学籍番号を入力しないでください。<br><a href="${BUNDLED_SETS.length?"help/":"../help/"}" target="_blank" rel="noopener">詳しい引き継ぎ方法を見る</a></div>
      </div>`;
   document.body.appendChild(bg);
   if(!fixed){
     const univSel=bg.querySelector("#req-univ"), other=bg.querySelector("#req-other"), group=bg.querySelector("#req-group");
-    const refresh=()=>{ other.style.display=univSel.value==="__other__"?"":"none"; group.innerHTML=groupOptionsHTML(univSel.value); };
+    if(existing){
+      if(UNIVERSITIES.includes(existing.univ)) univSel.value=existing.univ;
+      else{ univSel.value="__other__"; other.value=existing.univ; }
+    }
+    const refresh=()=>{ other.style.display=univSel.value==="__other__"?"":"none"; group.innerHTML=groupOptionsHTML(univSel.value==="__other__"?other.value.trim():univSel.value,existing?.group||""); };
     univSel.onchange=refresh; refresh();
   }
-  bg.querySelector("#req-save").onclick=()=>{
+  const submit=async allowReset=>{
+    const err=bg.querySelector("#req-error"), button=bg.querySelector("#req-save");
+    err.style.display="none";
     const sel=bg.querySelector("#req-univ");
-    const univ=sel.value==="__other__"? bg.querySelector("#req-other").value.trim() : sel.value;
+    const univ=sel.value==="__other__"?bg.querySelector("#req-other").value.trim():sel.value;
     const sid=bg.querySelector("#req-sid").value.trim();
     const group=bg.querySelector("#req-group").value.trim();
-    if(commitProfile(univ,sid,group)){ bg.remove(); initProfile(); refreshDataToggle(); updateHome(); }
+    const pin=bg.querySelector("#req-pin").value;
+    const confirmPin=bg.querySelector("#req-pin-confirm").value;
+    if(!/^\d{6}$/.test(pin)){ err.textContent="暗証番号は数字6桁で入力してください。"; err.style.display=""; return; }
+    if(pin!==confirmPin){ err.textContent="確認用の暗証番号が一致しません。"; err.style.display=""; return; }
+    button.disabled=true; button.textContent="確認中…";
+    try{
+      const result=await connectStudentIdentity(univ,sid,group,pin,allowReset);
+      if(result.wrongPin){
+        err.textContent="暗証番号が一致しません。入力を確認するか、下の再設定を選んでください。"; err.style.display="";
+        bg.querySelector("#req-reset").style.display="";
+        return;
+      }
+      if(!result.ok){ err.textContent=result.message||"登録を確認できませんでした。"; err.style.display=""; return; }
+      bg.remove(); initProfile(); refreshDataToggle(); updateHome(); renderAssignments();
+      await loadStudentAccess(); enforceRosterAccess();
+      if(existing&&!document.getElementById("access-suspended")) alert("✅ これまでの学習記録を引き継ぎました。今後は、同じ学籍番号と6桁暗証番号で別の端末からも開けます。");
+    }catch(e){ err.textContent="登録・復元に失敗しました："+(e.message||e); err.style.display=""; }
+    finally{ if(document.body.contains(button)){ button.disabled=false; button.textContent=submitLabel; } }
   };
-  bg.querySelector("#req-restore").onclick=async ()=>{
-    const code=bg.querySelector("#req-code").value;
-    if(!code.trim()){ alert("同期コードを入力してください。"); return; }
-    const ok=await restoreByCode(code);
-    if(!ok) return;
-    if(store.profile && store.profile.univ && store.profile.sid){
-      bg.remove();
-      refreshDataToggle();
-    }else{
-      alert("記録は復元しましたが、大学・学籍番号が未登録でした。お手数ですが上で登録してください。");
-    }
+  bg.querySelector("#req-save").onclick=()=>submit(false);
+  bg.querySelector("#req-reset").onclick=()=>{
+    if(confirm("暗証番号を再設定すると、学籍番号を知っている人も同じ操作を行える可能性があります。本人の学籍番号であることを確認して再設定しますか？")) submit(true);
   };
 }
-function commitProfile(univ,sid,group=""){
-  const fixed=fixedUniversity();
-  if(fixed) univ=fixed;
+
+async function commitProfile(univ,sid,group="",pin="",allowReset=false){
+  const fixed=fixedUniversity(); if(fixed) univ=fixed;
   if(!univ||!sid){ alert("大学名と学籍番号を入力してください。"); return false; }
-  store.profile={univ,sid,group:String(group||"").trim()}; saveStore(store); showProfileStatus();
-  ensureSyncCode();      /* 登録したら自動で同期コードを発行しクラウドへ（管理者ダッシュボードに自動で出る） */
-  renderAssignments();   /* 大学・学籍番号が変わると対象の課題も変わるため再描画 */
-  updateHome();          /* 問題公開設定も新しい大学・学籍番号で再評価 */
+  const identity=await BokiIdentity.studentIdentity(univ,sid,UNIVERSITY_LINKS);
+  if(store.identity?.studentKey===identity.studentKey){
+    store.profile={univ:identity.univ,sid:identity.sid,group:String(group||"").trim()};
+    saveStore(store); showProfileStatus(); renderAssignments(); updateHome(); return true;
+  }
+  if(!pin){
+    pin=prompt("変更先の学習記録を確認するため、6桁暗証番号を入力してください。")||"";
+    if(!pin) return false;
+  }
+  const previousStudentKey=store.identity?.studentKey||"";
+  let result=await connectStudentIdentity(univ,sid,group,pin,allowReset);
+  if(result.wrongPin && confirm("暗証番号が一致しません。学籍番号だけで暗証番号を再設定しますか？")) result=await connectStudentIdentity(univ,sid,group,pin,true);
+  if(!result.ok){ alert(result.message||(result.wrongPin?"暗証番号が一致しません。":"登録情報を保存できませんでした。")); return false; }
+  if(previousStudentKey && previousStudentKey!==identity.studentKey){
+    try{ await markStudentRecordMigrated(previousStudentKey,identity.studentKey,store.profile); }
+    catch(e){ alert("新しい学籍番号への保存は完了しましたが、旧記録の移行済み処理に失敗しました。通信環境を確認し、もう一度保存してください。"); }
+  }
   return true;
 }
-/* プロフィール登録済みで同期コードが無ければ自動発行し、端末内の記録をクラウドへ保存する（v3.12）。
-   これにより生徒が「同期コードを発行」を押さなくても全員が管理者ダッシュボードに出る。
-   機種変更用の同期コードは従来どおり 設定→データ保存・引き継ぎ で確認できる。 */
-function ensureSyncCode(){
-  if(!syncReady()) return false;
-  if(!store.profile || !store.profile.univ || !store.profile.sid) return false;
-  if(store.sync && store.sync.code) return false;
-  store.sync={code:genCode()};
-  saveStore(store);
-  renderSync();
-  cloudSave();           /* 端末内の記録を即アップロード */
-  return true;
-}
-function saveProfile(){
-  const sel=document.getElementById("univ-select");
-  const fixed=fixedUniversity();
-  const univ=fixed || (sel.value==="__other__"? document.getElementById("univ-other").value.trim() : sel.value);
-  const sid=document.getElementById("sid-input").value.trim();
-  const group=document.getElementById("group-input").value.trim();
-  if(!commitProfile(univ,sid,group)) return;
-  alert("✅ 保存しました");
-  profileEditOpen=false;
-  renderProfileArea();
-  refreshDataToggle();
+async function saveProfile(){
+  const sel=document.getElementById("univ-select"), fixed=fixedUniversity();
+  const univ=fixed||(sel.value==="__other__"?document.getElementById("univ-other").value.trim():sel.value);
+  const sid=document.getElementById("sid-input").value.trim(), group=document.getElementById("group-input").value.trim();
+  if(!await commitProfile(univ,sid,group)) return;
+  alert("✅ 保存しました"); profileEditOpen=false; renderProfileArea(); refreshDataToggle();
 }
 function showProfileStatus(){
   const p=store.profile; if(!p) return;
@@ -697,46 +729,138 @@ function showProfileStatus(){
   hdr.textContent=`仕訳問題対策｜${p.univ}　${p.sid}`;
 }
 
-/* ===== クラウド同期（Firestore REST・同期コード方式） ===== */
+/* ===== クラウド同期（大学＋学籍番号の恒久学生キー方式） ===== */
 function syncReady(){ return FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.apiKey; }
-function syncURL(code){ return `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents/${SYNC_COLLECTION}/${encodeURIComponent(code)}?key=${FIREBASE_CONFIG.apiKey}`; }
-function genCode(){
-  const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const blk=n=>Array.from({length:n},()=>A[Math.floor(Math.random()*A.length)]).join("");
-  return `BK2-${blk(4)}-${blk(4)}-${blk(4)}`;
+function firestoreURL(collection,id){ return `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents/${collection}/${encodeURIComponent(id)}?key=${FIREBASE_CONFIG.apiKey}`; }
+function firestoreString(field){ return field&&typeof field.stringValue==="string"?field.stringValue:""; }
+function firestoreInteger(field){ return Number(field&&(field.integerValue??field.doubleValue)||0); }
+async function firestoreLoad(collection,id){
+  const r=await fetch(firestoreURL(collection,id));
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return await r.json();
+}
+function studentDataSnapshot(source=store){
+  return {history:source.history||[],sets:source.sets||[],meta:source.meta||{},tests:source.tests||[],profile:source.profile||null,updatedAt:source.updatedAt||Date.now(),schemaVersion:2};
+}
+async function studentCloudLoad(studentKey){
+  const doc=await firestoreLoad(STUDENT_COLLECTION,studentKey);
+  if(!doc) return null;
+  let data={};
+  try{ data=JSON.parse(firestoreString(doc.fields&&doc.fields.data)||"{}"); }catch(e){}
+  return {
+    data,
+    verifier:{salt:firestoreString(doc.fields&&doc.fields.pinSalt),hash:firestoreString(doc.fields&&doc.fields.pinHash),iterations:firestoreInteger(doc.fields&&doc.fields.pinIterations)},
+    createdAt:firestoreInteger(doc.fields&&doc.fields.createdAt),
+    updateTime:doc.updateTime||"",
+    migratedTo:firestoreString(doc.fields&&doc.fields.migratedTo),
+    redirectUniv:firestoreString(doc.fields&&doc.fields.redirectUniv),
+    redirectSid:firestoreString(doc.fields&&doc.fields.redirectSid)
+  };
+}
+async function markStudentRecordMigrated(oldStudentKey,newStudentKey,profile){
+  if(!oldStudentKey||oldStudentKey===newStudentKey)return;
+  const doc=await firestoreLoad(STUDENT_COLLECTION,oldStudentKey);
+  if(!doc||firestoreString(doc.fields&&doc.fields.migratedTo)===newStudentKey)return;
+  const body={fields:{...(doc.fields||{}),
+    migratedTo:{stringValue:newStudentKey},migratedAt:{integerValue:String(Date.now())},
+    redirectUniv:{stringValue:profile?.univ||""},redirectSid:{stringValue:profile?.sid||""}
+  }};
+  let url=firestoreURL(STUDENT_COLLECTION,oldStudentKey);
+  if(doc.updateTime)url+=`&currentDocument.updateTime=${encodeURIComponent(doc.updateTime)}`;
+  const r=await fetch(url,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error("HTTP "+r.status);
 }
 let syncTimer=null, syncStatus="";
+let cloudSaveRunning=false, cloudSaveAgain=false;
 function scheduleCloudSave(){
   if(isAdminPreview()) return;
-  if(!syncReady() || !store.sync?.code) return;
+  if(!syncReady() || !store.identity?.studentKey || !store.identity?.pinVerified) return;
   clearTimeout(syncTimer);
   syncTimer=setTimeout(cloudSave, 4000);
 }
 async function cloudSave(){
   if(isAdminPreview()) return;
-  if(!syncReady() || !store.sync?.code) return;
+  if(!syncReady() || !store.identity?.studentKey || !store.identity?.pinVerified) return;
+  if(cloudSaveRunning){ cloudSaveAgain=true; return; }
+  cloudSaveRunning=true;
+  let saved=false;
   try{
     setSyncStatus("同期中…");
-    const body={fields:{
-      data:{stringValue:JSON.stringify({history:store.history,sets:store.sets,meta:store.meta,tests:store.tests,profile:store.profile,updatedAt:store.updatedAt})},
-      univ:{stringValue:store.profile?.univ||""},
-      sid:{stringValue:store.profile?.sid||""},
-      group:{stringValue:store.profile?.group||""},
-      updatedAt:{integerValue:String(store.updatedAt||Date.now())}
-    }};
-    const r=await fetch(syncURL(store.sync.code),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    store.sync.lastSync=Date.now();
-    localStorage.setItem(KEY,JSON.stringify(store));
+    const identity={...store.identity};
+    const localAtStart=studentDataSnapshot(store);
+    const profileAtStart={...(store.profile||{})};
+    for(let attempt=0;attempt<4;attempt++){
+      const remote=await studentCloudLoad(identity.studentKey);
+      if(remote?.migratedTo)throw new Error("この学籍番号は移行済みです。");
+      const merged=BokiIdentity.mergeStores(remote&&remote.data,localAtStart);
+      merged.profile=profileAtStart; merged.updatedAt=Date.now();
+      const verifier=identity.pinVerifier||(remote&&remote.verifier);
+      if(!verifier?.hash) throw new Error("暗証番号の設定が見つかりません。");
+      const createdAt=remote?.createdAt||Date.now();
+      const body={fields:{
+        studentKey:{stringValue:identity.studentKey},
+        data:{stringValue:JSON.stringify(merged)},
+        univ:{stringValue:profileAtStart.univ||""},
+        univCode:{stringValue:identity.univCode||""},
+        sid:{stringValue:profileAtStart.sid||""},
+        sidNormalized:{stringValue:identity.sidNormalized||""},
+        group:{stringValue:profileAtStart.group||""},
+        pinSalt:{stringValue:verifier.salt}, pinHash:{stringValue:verifier.hash}, pinIterations:{integerValue:String(verifier.iterations||BokiIdentity.PIN_ITERATIONS)},
+        schemaVersion:{integerValue:"2"}, createdAt:{integerValue:String(createdAt)}, updatedAt:{integerValue:String(merged.updatedAt)}
+      }};
+      let url=firestoreURL(STUDENT_COLLECTION,identity.studentKey);
+      url+=remote?`&currentDocument.updateTime=${encodeURIComponent(remote.updateTime)}`:"&currentDocument.exists=false";
+      const r=await fetch(url,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(r.ok){
+        if(store.identity?.studentKey===identity.studentKey){
+          const latest=BokiIdentity.mergeStores(merged,studentDataSnapshot(store));
+          const sync=store.sync, activeIdentity={...store.identity};
+          if(activeIdentity.pinVerifier?.hash&&activeIdentity.pinVerifier.hash!==verifier.hash)cloudSaveAgain=true;
+          store={...latest,identity:{...identity,...activeIdentity,pinVerifier:activeIdentity.pinVerifier||verifier,pinVerified:true,lastSync:Date.now()}};
+          if(sync) store.sync=sync; installBundledSets(); localStorage.setItem(KEY,JSON.stringify(store));
+        }
+        saved=true; break;
+      }
+      if((r.status===409||r.status===412) && attempt<3) continue;
+      throw new Error("HTTP "+r.status);
+    }
     setSyncStatus("✅ 同期済み "+new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"}));
   }catch(e){ setSyncStatus("⚠ 同期エラー（通信環境をご確認ください）"); }
+  finally{
+    cloudSaveRunning=false;
+    if(cloudSaveAgain){ cloudSaveAgain=false; scheduleCloudSave(); }
+  }
+  return saved;
 }
 async function cloudLoad(code){
-  const r=await fetch(syncURL(code));
-  if(r.status===404) return null;
-  if(!r.ok) throw new Error("HTTP "+r.status);
-  const doc=await r.json();
-  return JSON.parse(doc.fields.data.stringValue);
+  const doc=await firestoreLoad(SYNC_COLLECTION,code);
+  if(!doc) return null;
+  return JSON.parse(firestoreString(doc.fields&&doc.fields.data)||"{}");
+}
+
+async function connectStudentIdentity(univ,sid,group,pin,allowReset=false){
+  if(!/^\d{6}$/.test(String(pin||""))) return {ok:false,message:"暗証番号は数字6桁で入力してください。"};
+  if(cloudSaveRunning)return {ok:false,message:"現在の記録を同期中です。数秒待ってから、もう一度お試しください。"};
+  const identity=await BokiIdentity.studentIdentity(univ,sid,UNIVERSITY_LINKS);
+  const remote=await studentCloudLoad(identity.studentKey);
+  if(remote?.migratedTo)return {ok:false,message:`この記録の学籍番号は「${remote.redirectSid||"修正後の番号"}」へ変更されています。修正後の学籍番号を入力してください。`};
+  let verifier=remote&&remote.verifier;
+  if(remote && verifier?.hash && !allowReset && !await BokiIdentity.verifyPin(pin,verifier)) return {ok:false,wrongPin:true};
+  if(!verifier?.hash || allowReset) verifier=await BokiIdentity.createPinVerifier(pin);
+  const legacySync=store.sync;
+  let local=studentDataSnapshot(store);
+  if(legacySync?.code){
+    try{ const legacyRemote=await cloudLoad(legacySync.code); if(legacyRemote)local=BokiIdentity.mergeStores(legacyRemote,local); }catch(e){}
+  }
+  const merged=BokiIdentity.mergeStores(remote&&remote.data,local);
+  const remoteGroup=remote&&remote.data&&remote.data.profile&&remote.data.profile.group;
+  merged.profile={univ:identity.univ,sid:identity.sid,group:String(group||remoteGroup||"").trim()};
+  store={...merged,identity:{studentKey:identity.studentKey,univCode:identity.univCode,sidNormalized:identity.sidNormalized,pinVerifier:verifier,pinVerified:true,legacyCode:legacySync?.code||""}};
+  if(legacySync) store.sync=legacySync;
+  installBundledSets(); localStorage.setItem(KEY,JSON.stringify(store)); renderSync();
+  if(!await cloudSave())return {ok:false,message:"クラウドへ保存できませんでした。通信環境を確認して、もう一度お試しください。"};
+  return {ok:true,restored:!!remote};
 }
 
 /* ===== 管理者からの課題（自動配信） =====
@@ -776,91 +900,54 @@ function myAssignments(){
   return ASSIGNMENTS.filter(a=>publicationMatchesTarget(a&&a.target));
 }
 function setSyncStatus(t){ syncStatus=t; const el=document.getElementById("sync-status"); if(el) el.textContent=t; }
-function copySyncCode(){
-  const code=store.sync?.code; if(!code) return;
-  const done=()=>setSyncStatus("📋 同期コードをコピーしました");
-  const fallback=()=>{
-    const t=document.createElement("textarea"); t.value=code;
-    document.body.appendChild(t); t.select();
-    try{ document.execCommand("copy"); done(); }catch(e){ alert("コピーできませんでした。コードを長押し（または選択）してコピーしてください。"); }
-    t.remove();
-  };
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(code).then(done).catch(fallback);
-  }else fallback();
-}
 function renderSync(){
   const el=document.getElementById("sync-area"); if(!el) return;
-  const state = !syncReady()? "" : (store.sync?.code? "（有効）" : "（未設定）");
+  const state = !syncReady()? "" : (store.identity?.studentKey? "（有効）" : "（本人確認待ち）");
   const head=`<div style="font-weight:700; color:var(--primary-dark); font-size:.9rem; margin-bottom:6px">☁ クラウド同期${state}</div>`;
   let body="";
   if(!syncReady()){
     body=`<small style="color:var(--sub); font-size:.75rem">同期機能は準備中です（Firebase設定後に有効になります）</small>`;
-  }else if(store.sync?.code){
+  }else if(store.identity?.studentKey){
     body=`
-      <div style="font-size:.8rem; color:var(--sub)">同期コード（機種変更時はこのコードを新端末で入力）</div>
-      <div style="display:flex; align-items:center; gap:8px; margin:4px 0">
-        <span style="font-weight:700; font-size:1.05rem; letter-spacing:.5px; user-select:all">${esc(store.sync.code)}</span>
-        <button class="small-act" style="padding:4px 12px" onclick="copySyncCode()">📋 コピー</button>
-      </div>
+      <div style="font-size:.8rem; color:var(--sub)">別の端末では、大学専用URLから同じ学籍番号と6桁暗証番号を入力してください。</div>
       <div class="btns" style="margin-top:6px">
         <button class="small-act" onclick="cloudSave()">今すぐ同期</button>
-        <button class="small-act" onclick="enterSyncCode()">別のコードに切替</button>
+        <button class="small-act" onclick="changePin()">暗証番号を変更</button>
       </div>
-      <small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px">${esc(syncStatus||(store.sync.lastSync? "最終同期："+new Date(store.sync.lastSync).toLocaleString("ja-JP"):"未同期"))}</small>`;
+      <small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px">${esc(syncStatus||(store.identity.lastSync?"最終同期："+new Date(store.identity.lastSync).toLocaleString("ja-JP"):"未同期"))}</small>`;
   }else{
-    body=`
-      <div style="font-size:.8rem; color:var(--sub); margin-bottom:6px">学習記録をクラウドに保存し、機種変更しても引き継げます</div>
-      <div class="btns" style="margin-top:0">
-        <button class="small-act" onclick="issueSyncCode()">同期コードを発行</button>
-        <button class="small-act" onclick="enterSyncCode()">コードを入力して復元</button>
-      </div>
-      <small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px"></small>`;
+    body=`<div style="font-size:.8rem; color:var(--sub); margin-bottom:6px">大学・学籍番号・6桁暗証番号の確認後、自動で同期されます。</div><button class="small-act" onclick="requireProfile()">登録・復元を開く</button><small id="sync-status" style="display:block; color:var(--sub); font-size:.72rem; margin-top:4px"></small>`;
   }
   el.innerHTML=head+body;
   refreshDataToggle();
 }
-async function issueSyncCode(){
-  store.sync={code:genCode()};
-  saveStore(store); renderSync();
-  await cloudSave();
-  alert(`同期コードを発行しました：\n\n${store.sync.code}\n\nこのコードをメモしておくと、機種変更やブラウザ変更のときに学習記録を引き継げます。`);
-  renderSync();
-}
-async function restoreByCode(code){
-  code=(code||"").trim().toUpperCase();
-  if(!code) return false;
-  try{
-    setSyncStatus("確認中…");
-    const remote=await cloudLoad(code);
-    if(!remote){ alert("このコードの記録が見つかりませんでした。入力ミスがないかご確認ください。"); setSyncStatus(""); return false; }
-    if(store.history.length && !confirm("この端末の記録をクラウドの記録で置き換えます。よろしいですか？")){ setSyncStatus(""); return false; }
-    store={history:remote.history||[], sets:remote.sets||[], meta:remote.meta||{}, tests:remote.tests||[], profile:remote.profile||null, sync:{code, lastSync:Date.now()}, updatedAt:remote.updatedAt||Date.now()};
-    installBundledSets();
-    saveStore(store);
-    initProfile(); updateHome(); renderSync();
-    alert("復元しました。以後この端末は自動で同期されます。");
-    return true;
-  }catch(e){ alert("復元に失敗しました："+e.message); setSyncStatus(""); return false; }
-}
-async function enterSyncCode(){
-  const code=prompt("同期コードを入力してください（例：BK2-XXXX-XXXX-XXXX）");
-  if(code===null) return false;
-  return await restoreByCode(code);
+async function changePin(){
+  const verifier=store.identity?.pinVerifier; if(!verifier) return requireProfile();
+  const current=prompt("現在の6桁暗証番号を入力してください。"); if(current===null) return;
+  if(!await BokiIdentity.verifyPin(current,verifier)){ alert("現在の暗証番号が一致しません。"); return; }
+  const next=prompt("新しい6桁暗証番号を入力してください。"); if(next===null) return;
+  if(!/^\d{6}$/.test(next)){ alert("暗証番号は数字6桁で入力してください。"); return; }
+  store.identity.pinVerifier=await BokiIdentity.createPinVerifier(next); saveStore(store);
+  alert(await cloudSave()?"✅ 暗証番号を変更しました":"端末内の暗証番号は変更しましたが、クラウドへ保存できませんでした。通信環境を確認して、もう一度同期してください。");
 }
 async function initSync(){
   renderSync();
-  if(!syncReady() || !store.sync?.code) return;
+  if(!syncReady() || !store.identity?.studentKey || !store.identity?.pinVerified) return;
   try{
-    const remote=await cloudLoad(store.sync.code);
-    if(remote && (remote.updatedAt||0) > (store.updatedAt||0)){
-      const code=store.sync.code;
-      store={history:remote.history||[], sets:remote.sets||[], meta:remote.meta||{}, tests:remote.tests||[], profile:remote.profile||null, sync:{code, lastSync:Date.now()}, updatedAt:remote.updatedAt};
-      installBundledSets();
-      saveStore(store);
-      initProfile(); updateHome(); renderSync();
-      setSyncStatus("✅ クラウドの最新記録を取り込みました");
-    }
+    const remote=await studentCloudLoad(store.identity.studentKey);
+    if(remote){
+      if(remote.migratedTo){
+        store.profile={...(store.profile||{}),univ:remote.redirectUniv||store.profile?.univ||"",sid:remote.redirectSid||store.profile?.sid||""};
+        store.identity=null; localStorage.setItem(KEY,JSON.stringify(store)); initProfile(); renderSync(); requireProfile();
+        setSyncStatus("学籍番号が修正されています。修正後の番号と暗証番号を入力してください。"); return;
+      }
+      const identity={...store.identity,pinVerifier:remote.verifier?.hash?remote.verifier:store.identity.pinVerifier,lastSync:Date.now()};
+      const sync=store.sync, merged=BokiIdentity.mergeStores(remote.data,studentDataSnapshot(store));
+      store={...merged,identity}; if(sync) store.sync=sync;
+      installBundledSets(); localStorage.setItem(KEY,JSON.stringify(store)); initProfile(); updateHome(); renderSync();
+      setSyncStatus("✅ クラウドの記録と統合しました");
+    }else await cloudSave();
+    await loadStudentAccess(); enforceRosterAccess();
   }catch(e){ setSyncStatus("⚠ 同期確認に失敗（オフラインでも学習は継続できます）"); }
 }
 
@@ -1238,7 +1325,8 @@ function grade(){
   session.tFrozen ??= []; session.tFrozen[session.idx]=true;
   swDisplay();
   recalcSession();
-  store.history.push({qid:q.id, correct, date:new Date().toISOString().slice(0,10), ms:(session.times&&session.times[session.idx])||0});
+  const answeredAt=new Date().toISOString();
+  store.history.push({id:BokiIdentity.newEventId("answer"),qid:q.id,correct,date:answeredAt.slice(0,10),answeredAt,ms:(session.times&&session.times[session.idx])||0});
   saveStore(store);
 
   const tbl=`<table class="answer-table">
@@ -1273,7 +1361,8 @@ function finish(){
     if(!a.graded){
       a.correct=!!(a.d&&a.c&&a.d.length&&a.c.length&&sameEntries(a.d,q.debit)&&sameEntries(a.c,q.credit));
       a.graded=true;
-      store.history.push({qid:q.id, correct:a.correct, date:new Date().toISOString().slice(0,10), ms:(session.times&&session.times[i])||0});
+      const answeredAt=new Date().toISOString();
+      store.history.push({id:BokiIdentity.newEventId("answer"),qid:q.id,correct:a.correct,date:answeredAt.slice(0,10),answeredAt,ms:(session.times&&session.times[i])||0});
     }
   });
   saveStore(store);
@@ -1283,7 +1372,8 @@ function finish(){
   const totalMs=times.reduce((a,b)=>a+(b||0),0);
   /* 回別テストの結果を記録（成長ダッシュボード用） */
   if(s.scored && s.groupName){
-    const rec={group:s.groupName, score:s.score, max:s.max, correct:s.correct, total:s.list.length, date:new Date().toISOString().slice(0,10), timeMs:totalMs};
+    const completedAt=new Date().toISOString();
+    const rec={id:BokiIdentity.newEventId("test"),group:s.groupName,score:s.score,max:s.max,correct:s.correct,total:s.list.length,date:completedAt.slice(0,10),completedAt,timeMs:totalMs};
     /* 課題（管理者配信）の場合は、識別IDと問別の⭕❌をレコードに埋め込む（ダッシュボードで回収） */
     if(s.assignmentId){
       rec.assignmentId=s.assignmentId;
@@ -1779,6 +1869,30 @@ function downloadTemplate(){
   a.click(); URL.revokeObjectURL(a.href);
 }
 
+/* ===== ホーム画面への追加（PWA） ===== */
+let pwaInstallPrompt=null;
+const pwaIsIos=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const pwaStandalone=window.matchMedia?.("(display-mode: standalone)").matches||navigator.standalone===true;
+if(pwaIsIos&&!pwaStandalone){
+  const button=document.getElementById("pwa-install-btn"),note=document.getElementById("pwa-install-note");
+  if(button){button.style.display="";button.textContent="iPhoneのホーム画面に追加";}
+  if(note)note.textContent="Safariの共有ボタンから「ホーム画面に追加」を選ぶと、アプリのように起動できます。";
+}
+window.addEventListener("beforeinstallprompt",event=>{
+  event.preventDefault(); pwaInstallPrompt=event;
+  const button=document.getElementById("pwa-install-btn"); if(button) button.style.display="";
+});
+async function installPwa(){
+  if(pwaInstallPrompt){
+    await pwaInstallPrompt.prompt(); await pwaInstallPrompt.userChoice; pwaInstallPrompt=null;
+    const button=document.getElementById("pwa-install-btn"); if(button) button.style.display="none"; return;
+  }
+  alert(pwaIsIos?"Safari下部の共有ボタンを押し、「ホーム画面に追加」を選んでください。":"ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。");
+}
+if("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !isAdminPreview()){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("../sw.js").catch(()=>{}));
+}
+
 /* 同梱セットの自動インストール（既に同名セットがあればスキップ）。
    クラウド復元後にも呼び、古い同期データで新しい同梱セットが消えないようにする。 */
 function installBundledSets(){
@@ -1804,11 +1918,11 @@ initProfile();
 refreshDataToggle();
 updateHome();
 initSync();
-/* 既に大学・学籍番号を登録済みだが同期コード未発行の生徒も、次回起動時に自動でコード発行＆
-   端末内の記録をクラウドへアップロード（＝管理者ダッシュボードに出るようにする・v3.12） */
-ensureSyncCode();
 /* 課題と問題公開設定を取得してホームに反映 */
-Promise.all([loadAssignments(),loadPublications(),loadGroupConfig(),loadRosterAccess()]).then(()=>{ initProfile(); updateHome(); renderAssignments(); requireProfile(); enforceRosterAccess(); });
+Promise.all([loadAssignments(),loadPublications(),loadGroupConfig()]).then(async()=>{
+  initProfile(); updateHome(); renderAssignments(); requireProfile();
+  if(store.identity?.studentKey){ await loadStudentAccess(); enforceRosterAccess(); }
+});
 /* 別タブ・バックグラウンドに離れている間はストップウォッチを一時停止（戻ったら再開） */
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden){ pauseTimer(); }
