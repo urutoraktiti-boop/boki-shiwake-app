@@ -215,7 +215,7 @@
     <div class="journal-date"><strong id="journal-day">--</strong><span id="journal-month">---</span></div>
     <div>
       <span class="journal-kicker">SHIWAKE STUDY JOURNAL</span>
-      <h1>簿記 仕訳トレーニング <span class="ver">v3.32</span></h1>
+      <h1>簿記 仕訳トレーニング <span class="ver">v3.33</span></h1>
       <p id="journal-subtitle">今日の学習を、ひとつずつ記録する。</p>
     </div>
   </header>
@@ -264,12 +264,19 @@
         <div id="profile-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
           <select id="univ-select" style="flex:1.2; min-width:150px" onchange="profileUniversityChanged(this)"></select>
           <input type="text" id="univ-other" placeholder="大学名を入力" style="flex:1; min-width:130px; display:none">
-          <input type="text" id="sid-input" placeholder="学籍番号（大原登録番号）" style="flex:1; min-width:180px">
+          <div style="flex:1; min-width:190px">
+            <label for="sid-input" style="display:block; font-size:.78rem; font-weight:700; color:var(--primary-dark); margin-bottom:4px">学籍番号（登録番号）</label>
+            <input type="text" id="sid-input" placeholder="大学の学籍番号／大原の登録番号" aria-describedby="sid-input-help" style="width:100%">
+            <small id="sid-input-help" style="display:block; color:var(--sub); font-size:.7rem; margin-top:3px">学校から案内された本人の番号を入力してください。</small>
+          </div>
           <div style="display:flex; flex:1; min-width:210px; align-items:stretch">
             <span id="app-id-prefix" style="display:flex; align-items:center; padding:0 9px; border:1px solid var(--line); border-right:0; border-radius:8px 0 0 8px; background:#f3f8ff; font-weight:700">--</span>
             <input type="text" id="app-id-input" maxlength="12" placeholder="アプリID（カタカナ＋数字）" onblur="this.value=BokiIdentity.normalizeAppId(this.value)" style="flex:1; min-width:0; border-radius:0 8px 8px 0">
           </div>
-          <select id="group-input" style="flex:1; min-width:150px"></select>
+          <div id="group-input-wrap" style="flex:1; min-width:150px; display:none">
+            <label for="group-input" style="display:block; font-size:.78rem; font-weight:700; color:var(--primary-dark); margin-bottom:4px">グループ</label>
+            <select id="group-input" style="width:100%"></select>
+          </div>
           <button class="small-act" onclick="saveProfile()">保存</button>
           <button class="small-act" id="profile-cancel" style="display:none" onclick="cancelProfileEdit()">キャンセル</button>
         </div>
@@ -504,11 +511,18 @@ function groupValues(univ){
   const values=GROUP_CONFIG.groupsByUniversity&&GROUP_CONFIG.groupsByUniversity[univ];
   return Array.isArray(values)?values.map(String).filter(Boolean):[];
 }
+function hasGroupOptions(univ){ return groupValues(univ).length>0; }
 function groupOptionsHTML(univ,current=""){
   const values=groupValues(univ);
   const legacy=current&&!values.includes(String(current))?`<option value="${esc(current)}" selected>${esc(current)}（現在の登録）</option>`:"";
   const note=values.length?"未選択":"未選択（管理者の候補設定待ち）";
   return `<option value="" ${current?"":"selected"}>${note}</option>`+legacy+values.map(v=>`<option value="${esc(v)}" ${String(v)===String(current)?"selected":""}>${esc(v)}</option>`).join("");
+}
+function updateGroupSelect(group,wrap,univ,current=""){
+  if(!group) return;
+  group.innerHTML=groupOptionsHTML(univ,current);
+  group.value=current||"";
+  if(wrap) wrap.style.display=hasGroupOptions(univ)?"":"none";
 }
 async function loadGroupConfig(){
   try{
@@ -535,11 +549,11 @@ function enforceRosterAccess(){
   document.body.appendChild(bg);
 }
 function updateProfileGroupOptions(){
-  const sel=document.getElementById("univ-select"), other=document.getElementById("univ-other"), group=document.getElementById("group-input");
+  const sel=document.getElementById("univ-select"), other=document.getElementById("univ-other"), group=document.getElementById("group-input"), wrap=document.getElementById("group-input-wrap");
   if(!sel||!group) return;
   const univ=fixedUniversity()||(sel.value==="__other__"?(other?.value||"").trim():sel.value);
-  group.innerHTML=groupOptionsHTML(univ,store.profile?.group||"");
-  group.value=store.profile?.group||"";
+  const current=store.profile?.univ===univ?(store.profile?.group||""):"";
+  updateGroupSelect(group,wrap,univ,current);
 }
 function profileUniversityChanged(sel){
   const other=document.getElementById("univ-other");
@@ -559,7 +573,6 @@ function setProfileInputs(p){
   if(other){ other.style.display="none"; other.value=""; }
   if(sid) sid.value="";
   if(appId) appId.value="";
-  if(group) group.innerHTML=groupOptionsHTML(fixed||(p&&p.univ)||"",p&&p.group||"");
   if(fixed){
     sel.innerHTML=`<option value="${esc(fixed)}">${esc(fixed)}</option>`;
     sel.value=fixed;
@@ -571,8 +584,8 @@ function setProfileInputs(p){
     else if(p.univ && other){ sel.value="__other__"; other.style.display=""; other.value=p.univ; }
     if(sid) sid.value=p.sid||"";
     if(appId) appId.value=p.appId||"";
-    if(group) group.value=p.group||"";
   }
+  updateProfileGroupOptions();
   updateAppIdPrefix();
 }
 function initProfile(){
@@ -593,11 +606,11 @@ function renderProfileArea(){
       <div style="font-size:.85rem; color:var(--sub); margin-bottom:4px">現在の登録情報</div>
       <div style="font-weight:800; color:var(--primary-dark); font-size:1.05rem">${esc(displayIdForProfile(p))}</div>
       <div style="font-size:.78rem; color:var(--sub); margin:3px 0 8px">${esc(p.univ)}｜学籍番号 ${esc(p.sid)}</div>
-      <label for="profile-current-group" style="display:block; font-size:.78rem; color:var(--sub); margin-bottom:4px">グループ番号（任意）</label>
+      ${hasGroupOptions(p.univ)?`<label for="profile-current-group" style="display:block; font-size:.78rem; color:var(--sub); margin-bottom:4px">グループ</label>
       <div style="display:flex; gap:6px; margin-bottom:8px">
         <select id="profile-current-group" style="flex:1; min-width:0">${groupOptionsHTML(p.univ,p.group||"")}</select>
-        <button class="small-act" onclick="saveCurrentGroup()">グループ番号を保存</button>
-      </div>
+        <button class="small-act" onclick="saveCurrentGroup()">グループを保存</button>
+      </div>`:""}
       <button class="small-act" onclick="startProfileEdit()">登録情報・アプリIDを変更する</button>
       <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:6px">アプリIDはランキングなどに表示され、後から変更できます。同じ大学・学籍番号を使えば、別の端末でも同じ学習記録を開けます。</small>
       ${fixedUniversity() && p.univ!==fixedUniversity() ? `<small style="display:block; color:var(--ng); font-size:.72rem; margin-top:6px">このリンクは「${esc(fixedUniversity())}」専用です。大学名を直す場合は「ユーザー情報を修正する」から保存してください。</small>` : ""}`;
@@ -628,7 +641,7 @@ async function saveCurrentGroup(){
   if(!await commitProfile(p.univ,p.sid,input.value,p.appId)) return;
   profileEditOpen=false;
   renderProfileArea();
-  alert("✅ グループ番号を保存しました");
+  alert("✅ グループを保存しました");
 }
 /* 設定内の各セクションの開閉 */
 function dataSettingsLabel(open){
@@ -663,13 +676,21 @@ function requireProfile(){
        ${fixedUniversityNotice()}
        <div style="display:flex; flex-direction:column; gap:8px">
          ${fixed ? `<input type="hidden" id="req-univ" value="${esc(fixed)}"><input type="hidden" id="req-other" value="">` : `<select id="req-univ">${univOptionsHTML()}</select><input type="text" id="req-other" placeholder="大学名を入力" style="display:none">`}
-         <input type="text" id="req-sid" autocomplete="username" placeholder="学籍番号（大原登録番号）" value="${esc(existing?.sid||"")}">
+         <div>
+           <label for="req-sid" style="display:block; font-size:.82rem; font-weight:800; color:var(--primary-dark); margin-bottom:4px">学籍番号（登録番号）</label>
+           <input type="text" id="req-sid" autocomplete="username" placeholder="大学の学籍番号／大原の登録番号" aria-describedby="req-sid-help" value="${esc(existing?.sid||"")}" style="width:100%">
+           <small id="req-sid-help" style="display:block; color:var(--sub); font-size:.72rem; margin-top:3px">大学または学校から案内された、本人の学籍番号・登録番号を入力してください。</small>
+         </div>
          <div style="display:flex; align-items:stretch">
            <span id="req-app-prefix" style="display:flex; align-items:center; padding:0 9px; border:1px solid var(--line); border-right:0; border-radius:8px 0 0 8px; background:#f3f8ff; font-weight:800">${esc(BokiIdentity.universityDisplayCode(fixed,UNIVERSITY_LINKS))}-</span>
            <input type="text" id="req-app-id" maxlength="12" value="${esc(existing?.appId||"")}" placeholder="アプリID（全角カタカナ＋数字）" onblur="this.value=BokiIdentity.normalizeAppId(this.value)" style="flex:1; min-width:0; border-radius:0 8px 8px 0">
          </div>
          <small style="color:var(--sub); font-size:.72rem">ランキングなどでは学校コード付きのアプリIDだけを表示します。本名・学籍番号は入力しないでください。</small>
-         <select id="req-group">${groupOptionsHTML(fixed,existing?.group||"")}</select>
+         <div id="req-group-wrap" style="${hasGroupOptions(fixed)?"":"display:none"}">
+           <label for="req-group" style="display:block; font-size:.82rem; font-weight:800; color:var(--primary-dark); margin-bottom:4px">グループ</label>
+           <select id="req-group" style="width:100%">${groupOptionsHTML(fixed,existing?.group||"")}</select>
+           <small style="display:block; color:var(--sub); font-size:.72rem; margin-top:3px">担当の先生から指定されている場合に選択してください。</small>
+         </div>
          <input type="password" id="req-pin" inputmode="numeric" autocomplete="current-password" maxlength="6" placeholder="6桁暗証番号">
          <input type="password" id="req-pin-confirm" inputmode="numeric" autocomplete="new-password" maxlength="6" placeholder="6桁暗証番号（確認）">
          <div id="req-error" style="display:none; color:var(--ng); font-size:.8rem"></div>
@@ -680,12 +701,12 @@ function requireProfile(){
      </div>`;
   document.body.appendChild(bg);
   if(!fixed){
-    const univSel=bg.querySelector("#req-univ"), other=bg.querySelector("#req-other"), group=bg.querySelector("#req-group");
+    const univSel=bg.querySelector("#req-univ"), other=bg.querySelector("#req-other"), group=bg.querySelector("#req-group"), groupWrap=bg.querySelector("#req-group-wrap");
     if(existing){
       if(UNIVERSITIES.includes(existing.univ)) univSel.value=existing.univ;
       else{ univSel.value="__other__"; other.value=existing.univ; }
     }
-    const refresh=()=>{ const selected=univSel.value==="__other__"?other.value.trim():univSel.value; other.style.display=univSel.value==="__other__"?"":"none"; group.innerHTML=groupOptionsHTML(selected,existing?.group||""); bg.querySelector("#req-app-prefix").textContent=BokiIdentity.universityDisplayCode(selected,UNIVERSITY_LINKS)+"-"; };
+    const refresh=()=>{ const selected=univSel.value==="__other__"?other.value.trim():univSel.value; const current=existing?.univ===selected?(existing?.group||""):""; other.style.display=univSel.value==="__other__"?"":"none"; updateGroupSelect(group,groupWrap,selected,current); bg.querySelector("#req-app-prefix").textContent=BokiIdentity.universityDisplayCode(selected,UNIVERSITY_LINKS)+"-"; };
     univSel.onchange=refresh; refresh();
   }
   const submit=async allowReset=>{
